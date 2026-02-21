@@ -1,5 +1,7 @@
 # When you publish a release, open a PR (or push) to update the formula in robsannaa/tap.
 # Add secret HOMEBREW_TAP_TOKEN: a PAT with "public_repo" and "workflow" (or "repo") scope.
+# Tap maintainers: after merging the bump PR, run "brew update-python-resources zoho-cli"
+# in the tap repo so all transitive deps (e.g. idna) are listed in the formula.
 name: Bump Homebrew formula
 
 on:

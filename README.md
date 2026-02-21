@@ -35,6 +35,8 @@ $ zoho --md mail list
 ```bash
 # Homebrew (macOS / Linux)
 brew install robsannaa/tap/zoho-cli
+# If you see "missing dependency 'idna'" (or similar), run: brew reinstall zoho-cli
+# Tap maintainers: ensure the formula lists all deps (e.g. brew update-python-resources zoho-cli in the tap repo).
 
 # uv (all platforms)
 uv tool install git+https://github.com/robsannaa/zoho-cli

@@ -9,6 +9,22 @@ Output:
 from __future__ import annotations
 
 import sys
+
+# Fail fast with a clear message if any runtime dependency is missing
+# (e.g. Homebrew formula may omit transitive deps like idna)
+_REQUIRED_DEPS = ("idna", "httpx", "typer", "keyring", "platformdirs")
+for _dep in _REQUIRED_DEPS:
+    try:
+        __import__(_dep)
+    except ImportError as e:
+        print(
+            f"zoho-cli: missing dependency '{_dep}'.\n"
+            "Reinstall with:  pip install zoho-cli   or   brew reinstall zoho-cli",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+from importlib.metadata import version
 from pathlib import Path
 from typing import List, Optional
 
@@ -18,13 +34,22 @@ import typer
 from zoho_cli import auth, config as _config, folders as _folders, mail as _mail, storage, utils
 from zoho_cli.api import ZohoMailClient
 
+
+def _get_version() -> str:
+    try:
+        return version("zoho-cli")
+    except Exception:
+        from zoho_cli import __version__
+        return __version__
+
+
 # ── app setup ─────────────────────────────────────────────────────────────────
 
 app = typer.Typer(
     name="zoho",
     no_args_is_help=True,
     add_completion=False,
-    help="Zoho Mail CLI — JSON by default, Markdown with --md.",
+    help=f"Zoho Mail CLI (v{_get_version()}) — JSON by default, Markdown with --md.",
 )
 mail_app    = typer.Typer(no_args_is_help=True, help="Message operations.")
 folders_app = typer.Typer(no_args_is_help=True, help="Folder management.")
@@ -33,7 +58,6 @@ config_app  = typer.Typer(no_args_is_help=True, help="Configuration helpers.")
 app.add_typer(mail_app,    name="mail")
 app.add_typer(folders_app, name="folders")
 app.add_typer(config_app,  name="config")
-
 
 # ── global state ──────────────────────────────────────────────────────────────
 
@@ -47,6 +71,12 @@ class _State:
 _S = _State()
 
 
+# Handle -v/--version before Typer requires a subcommand
+if len(sys.argv) > 1 and set(sys.argv[1:]) <= {"-v", "--version"}:
+    print(_get_version())
+    sys.exit(0)
+
+
 @app.callback()
 def _global(
     account: Optional[str] = typer.Option(
@@ -57,7 +87,13 @@ def _global(
     ),
     debug: bool = typer.Option(False, "--debug", help="Log HTTP/debug to stderr."),
     md: bool    = typer.Option(False, "--md", help="Markdown output instead of JSON."),
+    version_flag: bool = typer.Option(
+        False, "--version", "-v", help="Show version and exit.",
+    ),
 ) -> None:
+    if version_flag:
+        print(_get_version())
+        raise typer.Exit(0)
     _S.account     = account
     _S.config_path = config_path
     _S.debug       = debug
