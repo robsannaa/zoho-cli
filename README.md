@@ -28,17 +28,20 @@ $ zoho --md mail list
 **Requires Python 3.11+. Works on macOS, Linux, and Windows.**
 
 ```bash
-# uv (recommended)
-uv tool install git+https://github.com/steipete/zoho-cli
+# Homebrew (macOS / Linux)
+brew install robsannaa/tap/zoho-cli
 
-# pipx (alternative)
-pipx install git+https://github.com/steipete/zoho-cli
+# uv (all platforms)
+uv tool install git+https://github.com/robsannaa/zoho-cli
+
+# pipx (all platforms)
+pipx install git+https://github.com/robsannaa/zoho-cli
 ```
 
 Or from source:
 
 ```bash
-git clone https://github.com/steipete/zoho-cli
+git clone https://github.com/robsannaa/zoho-cli
 cd zoho-cli
 uv tool install .
 ```
