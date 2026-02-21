@@ -52,7 +52,10 @@ uv tool install .
 
 ### 1 — Create an OAuth client in Zoho
 
-1. Go to **[api-console.zoho.com](https://api-console.zoho.com/)** → **Add Client** → **Server-based Applications**.
+1. Go to **[api-console.zoho.com](https://api-console.zoho.com/)** (or your regional console, e.g. [api-console.zoho.eu](https://api-console.zoho.eu/)) → **Add Client** → **Mobile/Desktop Application**.
+
+   > **Important:** You must choose **Mobile/Desktop Application**, not "Server-based Applications". Only this client type allows `localhost` redirect URIs.
+
 2. Fill in:
 
    | Field | Value |
@@ -61,7 +64,7 @@ uv tool install .
    | Homepage URL | `https://example.com` |
    | Authorized Redirect URIs | `http://localhost:51821/callback` |
 
-   > Use `http://localhost:51821/callback`. The CLI spins up a local server on that port to capture the OAuth code automatically — no copy-pasting URLs.
+   > The CLI spins up a local server on port 51821 to capture the OAuth code automatically — no copy-pasting URLs.
    >
    > For headless/CI use, also add `https://example.com/zoho/oauth/callback` and use `zoho login --no-browser`.
 

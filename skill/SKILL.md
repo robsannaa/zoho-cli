@@ -1,7 +1,7 @@
 ---
 name: zoho-mail
 description: Read, search, send, and manage Zoho Mail from the terminal. JSON output for scripting and agents. No api keys required.
-homepage: https://github.com/steipete/zoho-cli
+homepage: https://github.com/robsannaa/zoho-cli
 user-invocable: false
 ---
 
@@ -15,10 +15,10 @@ user-invocable: false
 
 ```bash
 # uv (recommended — macOS / Linux / Windows)
-uv tool install git+https://github.com/steipete/zoho-cli
+uv tool install git+https://github.com/robsannaa/zoho-cli
 
 # pipx (alternative)
-pipx install git+https://github.com/steipete/zoho-cli
+pipx install git+https://github.com/robsannaa/zoho-cli
 ```
 
 After install, run the one-time setup:
@@ -28,7 +28,7 @@ zoho config init   # save your Zoho OAuth client_id / client_secret
 zoho login         # open browser, region auto-detected
 ```
 
-See the full setup guide in the [README](https://github.com/steipete/zoho-cli#setup).
+See the full setup guide in the [README](https://github.com/robsannaa/zoho-cli#setup).
 
 ---
 
