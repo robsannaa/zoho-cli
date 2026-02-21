@@ -1,0 +1,15 @@
+{
+  "requires": {"bins": ["zoho"]},
+  "install": [
+    {
+      "name": "Install zoho-cli (uv)",
+      "bins": ["zoho"],
+      "command": "uv tool install git+https://github.com/steipete/zoho-cli"
+    },
+    {
+      "name": "Install zoho-cli (pipx)",
+      "bins": ["zoho"],
+      "command": "pipx install git+https://github.com/steipete/zoho-cli"
+    }
+  ]
+}
