@@ -198,21 +198,19 @@ def login(
         client_secret = click.prompt("Zoho OAuth Client Secret", hide_input=True, err=True)
         cfg["client_secret"] = client_secret
 
-    # ── resolve the correct regional accounts server ───────────────────────
-    # Priority: ZOHO_ACCOUNTS_BASE_URL env > cached config > auto-detect
     import os
-    forced_accounts_url = _config.infer_accounts_server(cfg)
-    if not forced_accounts_url:
-        _stderr("Auto-detecting your Zoho region…")
-        forced_accounts_url = auth.discover_accounts_server(client_id)
-        _stderr(f"Detected: {forced_accounts_url}")
-
-    os.environ["ZOHO_ACCOUNTS_BASE_URL"] = forced_accounts_url
-
     scopes = auth.DEFAULT_SCOPES
 
     if no_browser:
         # ── manual paste flow (headless / remote) ─────────────────────────
+        # Detect region first (no local server needed).
+        forced_accounts_url = _config.infer_accounts_server(cfg)
+        if not forced_accounts_url:
+            _stderr("Auto-detecting your Zoho region…")
+            forced_accounts_url = auth.discover_accounts_server(client_id)
+            _stderr(f"Detected: {forced_accounts_url}")
+        os.environ["ZOHO_ACCOUNTS_BASE_URL"] = forced_accounts_url
+
         redirect_uri = cfg.get("redirect_uri", "https://example.com/zoho/oauth/callback")
         auth_url = auth.build_auth_url(client_id, redirect_uri, scopes)
         _stderr("\n── Zoho OAuth Login (manual) ──────────────────────────────")
@@ -225,8 +223,22 @@ def login(
         code, accounts_server = auth.parse_redirect(raw_url)
     else:
         # ── browser flow with local callback server ────────────────────────
+        # Bind the port NOW — before region detection — so it is held during
+        # the ~8 s probe window and ready the instant the browser redirects.
+        cb_server, redirect_uri, _cb_result = auth.create_callback_server(port)
+        _stderr(f"Listening on {redirect_uri} …")
+
+        # Detect region while the server is already bound.
+        forced_accounts_url = _config.infer_accounts_server(cfg)
+        if not forced_accounts_url:
+            _stderr("Auto-detecting your Zoho region…")
+            forced_accounts_url = auth.discover_accounts_server(client_id)
+            _stderr(f"Detected: {forced_accounts_url}")
+        os.environ["ZOHO_ACCOUNTS_BASE_URL"] = forced_accounts_url
+
         redirect_uri, code, accounts_server = auth.browser_login_flow(
             client_id, scopes, preferred_port=port,
+            _server=cb_server, _redirect_uri=redirect_uri, _result=_cb_result,
         )
 
     token_resp = auth.exchange_code(

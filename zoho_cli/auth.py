@@ -130,29 +130,55 @@ def _make_callback_handler(result: dict) -> type:
     return _Handler
 
 
+def create_callback_server(preferred_port: int = 51821) -> tuple:
+    """
+    Bind the OAuth callback server immediately and return early.
+    Call this BEFORE region detection so the port is held the whole time.
+
+    Binds to 127.0.0.1 (IPv4) explicitly — on macOS, binding to "localhost"
+    resolves to ::1 (IPv6) while browsers connect via 127.0.0.1 (IPv4),
+    causing ERR_CONNECTION_REFUSED even though the server appears to be running.
+
+    Returns (server, redirect_uri, result_dict).
+    """
+    result: dict = {}
+    handler_cls = _make_callback_handler(result)
+    try:
+        server = HTTPServer(("127.0.0.1", preferred_port), handler_cls)
+        actual_port = preferred_port
+    except OSError:
+        server = HTTPServer(("127.0.0.1", 0), handler_cls)
+        actual_port = server.server_address[1]
+    # Keep redirect_uri as localhost (matches Zoho console registration);
+    # browsers resolve localhost → 127.0.0.1 so the binding above is reached.
+    redirect_uri = f"http://localhost:{actual_port}/callback"
+    return server, redirect_uri, result
+
+
 def browser_login_flow(
     client_id: str,
     scopes: list[str],
     preferred_port: int = 51821,
+    _server=None,
+    _redirect_uri: Optional[str] = None,
+    _result: Optional[dict] = None,
 ) -> tuple[str, str, Optional[str]]:
     """
-    Open the browser, spin up a local server, wait for the OAuth callback.
-    Returns (redirect_uri, code, accounts_server).
+    Open the browser, wait for the OAuth callback, return (redirect_uri, code, accounts_server).
+
+    If _server/_redirect_uri/_result are supplied (pre-created by the caller via
+    create_callback_server) they are used as-is; otherwise a new server is created.
+    This lets the caller bind the port *before* doing region detection so the
+    socket is always held when the browser redirect arrives.
     """
+    import time
     import webbrowser
 
-    result: dict = {}
-    handler_cls = _make_callback_handler(result)
+    if _server is not None and _redirect_uri is not None and _result is not None:
+        server, redirect_uri, result = _server, _redirect_uri, _result
+    else:
+        server, redirect_uri, result = create_callback_server(preferred_port)
 
-    # Bind server — preferred port first, then let OS pick
-    try:
-        server = HTTPServer(("localhost", preferred_port), handler_cls)
-        actual_port = preferred_port
-    except OSError:
-        server = HTTPServer(("localhost", 0), handler_cls)
-        actual_port = server.server_address[1]
-
-    redirect_uri = f"http://localhost:{actual_port}/callback"
     auth_url = build_auth_url(client_id, redirect_uri, scopes)
 
     print("\nOpening browser for authentication…", file=sys.stderr)
@@ -162,14 +188,11 @@ def browser_login_flow(
     else:
         print(f"Waiting for callback on {redirect_uri} …\n", file=sys.stderr)
 
-    # Loop until we receive the request that contains the OAuth code.
-    # A single handle_request() is not enough: browsers often fire
-    # additional requests (favicon, preflight, etc.) before the real
-    # callback arrives, which would consume the one-shot slot and leave
-    # the server closed when the actual redirect comes in.
-    import time
+    # Loop until we capture the OAuth code. A single handle_request() is not
+    # enough: browsers fire extra requests (favicon, preflight) before the
+    # real /callback?code=... arrives.
     deadline = time.monotonic() + 300  # 5-minute wall-clock limit
-    server.timeout = 2  # short select() interval so we can check deadline
+    server.timeout = 2               # short poll so we can re-check deadline
     while not result.get("code"):
         if time.monotonic() > deadline:
             break
