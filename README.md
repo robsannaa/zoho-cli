@@ -126,9 +126,13 @@ Output fields: `messageId`, `folderId`, `subject`, `from`, `to`, `date`, `unread
 ### Search
 
 ```bash
-zoho mail search "invoice 2025"
-zoho mail search "from:boss@example.com" -n 10
+zoho mail search "invoice 2025"                  # plain text → searches everywhere
+zoho mail search "subject:invoice" -n 10         # subject only
+zoho mail search "from:boss@example.com" -n 10   # by sender
+zoho mail search "entire:oliwa" -n 20            # explicit full-text
 ```
+
+Plain words are automatically searched across all fields (`entire:`). You can also use Zoho's search syntax directly: `subject:`, `from:`, `content:`, `entire:`, `has:attachment`, `newMails`.
 
 ### Get full message
 

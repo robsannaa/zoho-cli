@@ -305,6 +305,12 @@ def mail_search(
     client    = _get_client(cfg, email)
     account_id = _require_account_id(cfg, email)
 
+    if len(query.strip()) < 2:
+        utils.error_exit("invalid_query", "Search query must be at least 2 characters.")
+    # Zoho search API requires qualifier syntax (e.g. "entire:word").
+    # Auto-wrap bare words so users can just type plain text naturally.
+    if ":" not in query:
+        query = f"entire:{query}"
     resp     = client.search_messages(account_id, query, limit=limit)
     messages = [_mail.format_message_summary(m) for m in resp.get("data", [])]
     utils.output(messages, md_render=_md_mail_list)
