@@ -5,6 +5,8 @@
 
 Fast, script-friendly CLI for Zoho Mail. JSON output by default, Markdown tables with `--md`. Pipe to `jq`, use in scripts, or feed directly to AI agents.
 
+Built in the spirit of [steipete/gog](https://github.com/steipete/gog) — a Google Workspace CLI designed to give LLMs and AI agents (like [OpenClaw](https://openclaw.ai)) direct access to your tools without any middleman. You create your own Zoho OAuth app, connect it once, and you're done. No third-party service, no subscription, no data leaving your machine. Free forever.
+
 ```bash
 $ zoho mail list
 [

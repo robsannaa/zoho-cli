@@ -81,8 +81,8 @@ def _require_account(cfg: dict) -> str:
 
 
 def _require_credentials(cfg: dict) -> tuple[str, str]:
-    cid = cfg.get("client_id")
-    csec = cfg.get("client_secret")
+    cid = (cfg.get("client_id") or "").strip()
+    csec = (cfg.get("client_secret") or "").strip()
     if not cid or not csec:
         utils.error_exit("missing_credentials", "client_id and client_secret must be set. Run: zoho config init")
     return cid, csec  # type: ignore[return-value]
@@ -188,14 +188,14 @@ def login(
     if not email:
         email = click.prompt("Account e-mail", err=True)
 
-    client_id     = cfg.get("client_id")
-    client_secret = cfg.get("client_secret")
+    client_id     = (cfg.get("client_id") or "").strip() or None
+    client_secret = (cfg.get("client_secret") or "").strip() or None
 
     if not client_id:
-        client_id = click.prompt("Zoho OAuth Client ID", err=True)
+        client_id = click.prompt("Zoho OAuth Client ID", err=True).strip()
         cfg["client_id"] = client_id
     if not client_secret:
-        client_secret = click.prompt("Zoho OAuth Client Secret", hide_input=True, err=True)
+        client_secret = click.prompt("Zoho OAuth Client Secret", hide_input=True, err=True).strip()
         cfg["client_secret"] = client_secret
 
     import os
@@ -618,19 +618,19 @@ def config_init() -> None:
 
     cfg["client_id"] = click.prompt(
         "Zoho OAuth Client ID", default=cfg.get("client_id", ""), err=True,
-    )
+    ).strip()
     cfg["client_secret"] = click.prompt(
         "Zoho OAuth Client Secret",
         default=cfg.get("client_secret", ""),
         hide_input=True, confirmation_prompt=False, err=True,
-    )
+    ).strip()
     cfg["redirect_uri"] = click.prompt(
         "Redirect URI (for --no-browser mode)",
         default=cfg.get("redirect_uri", "https://example.com/zoho/oauth/callback"),
         err=True,
-    )
+    ).strip()
     cfg["default_account"] = click.prompt(
         "Default account e-mail", default=cfg.get("default_account", ""), err=True,
-    )
+    ).strip()
     _config.save(cfg, _S.config_path)
     utils.output_status(f"Config saved", extra={"config_path": str(p)})

@@ -1,23 +1,53 @@
 ---
 name: zoho-mail
-description: Read, search, send, and manage Zoho Mail from the terminal. JSON output for scripting and agents. No api keys required.
+version: 0.1.1
+description: Read, search, send, and manage Zoho Mail from the terminal. JSON output for scripting and agents. Requires the 'zoho' binary (install via brew/uv/pipx), one-time OAuth setup (zoho config init; zoho login), and stores credentials locally (config file and OS keyring). Optional env ZOHO_ACCOUNT, ZOHO_CONFIG, ZOHO_TOKEN_PASSWORD. No third-party service required.
+compatibility: Requires the 'zoho' CLI (install via brew/uv/pipx), one-time OAuth setup (zoho config init; zoho login), and network access. Primary credentials: OAuth client_id/client_secret and access/refresh tokens; stored locally in config.json and/or OS keyring — users should be aware these are sensitive secrets. Optional env: ZOHO_ACCOUNT, ZOHO_CONFIG, ZOHO_TOKEN_PASSWORD.
 homepage: https://github.com/robsannaa/zoho-cli
 user-invocable: false
+requires:
+  bins:
+    - zoho
+  env:
+    - name: ZOHO_ACCOUNT
+      description: Default Zoho account email
+      required: false
+    - name: ZOHO_CONFIG
+      description: Path to config.json
+      required: false
+    - name: ZOHO_TOKEN_PASSWORD
+      description: Passphrase for encrypted file token storage (CI/headless)
+      required: false
+install:
+  - kind: brew
+    formula: robsannaa/tap/zoho-cli
+    bins: [zoho]
+  - kind: uv
+    package: git+https://github.com/robsannaa/zoho-cli
+    bins: [zoho]
+  - kind: pipx
+    package: git+https://github.com/robsannaa/zoho-cli
+    bins: [zoho]
 ---
 
 # zoho — Zoho Mail CLI
+
+**Requirements:** the `zoho` binary (install via brew/uv/pipx below), one-time OAuth setup, and local credential storage (config + OS keyring).
 
 `zoho` is a command-line tool for Zoho Mail. All output is **JSON by default** — structured, pipe-friendly, and agent-ready. Use `--md` for markdown tables.
 
 ## Install
 
-**Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/) or [pipx](https://pipx.pypa.io/).**
+**Requires Python 3.11+. Works on macOS, Linux, and Windows.**
 
 ```bash
-# uv (recommended — macOS / Linux / Windows)
+# Homebrew (macOS / Linux)
+brew install robsannaa/tap/zoho-cli
+
+# uv (all platforms)
 uv tool install git+https://github.com/robsannaa/zoho-cli
 
-# pipx (alternative)
+# pipx (all platforms)
 pipx install git+https://github.com/robsannaa/zoho-cli
 ```
 
@@ -53,6 +83,12 @@ zoho mail list 2>&1 >/dev/null      # see error JSON
 ## Authentication
 
 Tokens are stored in the OS keyring and refreshed automatically before every command. No manual token management needed.
+
+**Credential storage (sensitive):** Users must be aware that the CLI stores sensitive data locally:
+- **OAuth client_id and client_secret** — saved via `zoho config init` in the config file (e.g. `~/.config/zoho-cli/config.json`).
+- **Access and refresh tokens** — stored in the OS keyring (or, if `ZOHO_TOKEN_PASSWORD` is set, in an encrypted file). These are used to access Zoho Mail on the user's behalf.
+
+Do not expose config files or keyring entries to untrusted parties.
 
 If a command fails with `not_logged_in` or `token_refresh_failed`, tell the user to run:
 ```bash
