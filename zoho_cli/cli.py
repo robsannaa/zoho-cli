@@ -53,10 +53,12 @@ app = typer.Typer(
 )
 mail_app    = typer.Typer(no_args_is_help=True, help="Message operations.")
 folders_app = typer.Typer(no_args_is_help=True, help="Folder management.")
+labels_app  = typer.Typer(no_args_is_help=True, help="Label management.")
 config_app  = typer.Typer(no_args_is_help=True, help="Configuration helpers.")
 
 app.add_typer(mail_app,    name="mail")
 app.add_typer(folders_app, name="folders")
+app.add_typer(labels_app,  name="labels")
 app.add_typer(config_app,  name="config")
 
 # ── global state ──────────────────────────────────────────────────────────────
@@ -143,6 +145,18 @@ def _require_account_id(cfg: dict, email: str) -> str:
 
 def _stderr(msg: str) -> None:
     print(msg, file=sys.stderr)
+
+
+def _resolve_label_id(client: "ZohoMailClient", account_id: str, name_or_id: str) -> str:
+    """Resolve a label name or numeric ID to a labelId string."""
+    if name_or_id.isdigit():
+        return name_or_id
+    resp = client.get_labels(account_id)
+    for lbl in resp.get("data", []):
+        if lbl.get("labelName", "").lower() == name_or_id.lower():
+            return str(lbl["labelId"])
+    utils.error_exit("label_not_found", f"Label '{name_or_id}' not found. Run: zoho labels list")
+    return ""  # unreachable
 
 
 # ── markdown renderers ────────────────────────────────────────────────────────
@@ -538,7 +552,7 @@ def mail_move(
     account_id = _require_account_id(cfg, email)
 
     folder_id = _mail.resolve_folder_id(client, account_id, to)
-    resp   = client.update_message(account_id, "move", list(ids), folderId=folder_id)
+    resp   = client.update_message(account_id, "moveMessage", list(ids), destfolderId=folder_id)
     status = resp.get("data", {})
     utils.output_status(
         f"Moved {len(ids)} message(s) to {to}",
@@ -552,25 +566,25 @@ def mail_move(
 @mail_app.command("spam")
 def mail_spam(ids: List[str] = typer.Argument(...)) -> None:
     """Mark messages as spam."""
-    _bulk("markAsSpam", list(ids), "Marked as spam")
+    _bulk("moveToSpam", list(ids), "Marked as spam")
 
 
 @mail_app.command("not-spam")
 def mail_not_spam(ids: List[str] = typer.Argument(...)) -> None:
     """Mark messages as not spam."""
-    _bulk("markAsNotSpam", list(ids), "Marked as not spam")
+    _bulk("markNotSpam", list(ids), "Marked as not spam")
 
 
 @mail_app.command("archive")
 def mail_archive(ids: List[str] = typer.Argument(...)) -> None:
     """Archive messages."""
-    _bulk("archive", list(ids), "Archived")
+    _bulk("archiveMails", list(ids), "Archived")
 
 
 @mail_app.command("unarchive")
 def mail_unarchive(ids: List[str] = typer.Argument(...)) -> None:
     """Unarchive messages."""
-    _bulk("unarchive", list(ids), "Unarchived")
+    _bulk("unArchiveMails", list(ids), "Unarchived")
 
 
 @mail_app.command("delete")
@@ -582,6 +596,144 @@ def mail_delete(
     mode  = "hardDelete" if permanent else "moveToTrash"
     label = "Permanently deleted" if permanent else "Moved to Trash"
     _bulk(mode, list(ids), label)
+
+
+@mail_app.command("reply")
+def mail_reply(
+    message_id: str           = typer.Argument(..., help="Message ID to reply to."),
+    text:       str           = typer.Option(...,  "--text", "-t", help="Reply body."),
+    folder_id:  Optional[str] = typer.Option(None, "--folder-id",  help="Folder ID (skips auto-scan)."),
+    quote:      bool          = typer.Option(False, "--quote",      help="Append quoted original."),
+) -> None:
+    """Reply to a message."""
+    cfg        = _cfg()
+    email      = _require_account(cfg)
+    client     = _get_client(cfg, email)
+    account_id = _require_account_id(cfg, email)
+
+    fid = folder_id or _mail.find_folder_for_message(client, account_id, message_id)
+    if not fid:
+        utils.error_exit("message_not_found", f"Message {message_id} not found in any folder.")
+
+    resp    = client.get_message_content(account_id, fid, message_id)
+    msg     = _mail.format_message_content(resp.get("data", resp))
+    to_addr = msg["from"]
+    subject = msg["subject"]
+    if not subject.lower().startswith("re:"):
+        subject = f"Re: {subject}"
+
+    body = text
+    if quote and msg.get("textBody"):
+        orig = "\n".join(f"> {line}" for line in msg["textBody"].splitlines())
+        body = f"{text}\n\n{orig}"
+
+    payload = {
+        "fromAddress": email,
+        "toAddress":   to_addr,
+        "subject":     subject,
+        "mailFormat":  "plaintext",
+        "content":     body,
+    }
+    send_resp = client.send_message(account_id, payload)
+    sent      = send_resp.get("data", send_resp)
+    utils.output_status(f"Reply sent to {to_addr}", extra={"messageId": str(sent.get("messageId", ""))})
+
+
+@mail_app.command("forward")
+def mail_forward(
+    message_id: str           = typer.Argument(..., help="Message ID to forward."),
+    to:         List[str]     = typer.Option(...,  "--to",  help="Recipient (repeatable)."),
+    text:       Optional[str] = typer.Option(None, "--text", "-t", help="Optional note before the forwarded message."),
+    folder_id:  Optional[str] = typer.Option(None, "--folder-id", help="Folder ID (skips auto-scan)."),
+) -> None:
+    """Forward a message to one or more recipients."""
+    cfg        = _cfg()
+    email      = _require_account(cfg)
+    client     = _get_client(cfg, email)
+    account_id = _require_account_id(cfg, email)
+
+    fid = folder_id or _mail.find_folder_for_message(client, account_id, message_id)
+    if not fid:
+        utils.error_exit("message_not_found", f"Message {message_id} not found in any folder.")
+
+    resp    = client.get_message_content(account_id, fid, message_id)
+    msg     = _mail.format_message_content(resp.get("data", resp))
+    subject = msg["subject"]
+    if not subject.lower().startswith("fwd:"):
+        subject = f"Fwd: {subject}"
+
+    orig_block = (
+        f"\n\n---------- Forwarded message ----------\n"
+        f"From: {msg['from']}\n"
+        f"Subject: {msg['subject']}\n\n"
+        f"{msg.get('textBody', '')}"
+    )
+    body = (text or "") + orig_block
+
+    payload = {
+        "fromAddress": email,
+        "toAddress":   ",".join(to),
+        "subject":     subject,
+        "mailFormat":  "plaintext",
+        "content":     body,
+    }
+    send_resp = client.send_message(account_id, payload)
+    sent      = send_resp.get("data", send_resp)
+    utils.output_status(f"Forwarded to {', '.join(to)}", extra={"messageId": str(sent.get("messageId", ""))})
+
+
+@mail_app.command("flag")
+def mail_flag(
+    ids:  List[str] = typer.Argument(...),
+    type: str       = typer.Option("important", "--type", help="Flag type: important, followup, info, clear."),
+) -> None:
+    """Flag messages (important / follow-up / info) or clear flags."""
+    valid = {"important", "followup", "info", "clear"}
+    if type not in valid:
+        utils.error_exit("invalid_flag", f"--type must be one of: {', '.join(sorted(valid))}")
+    flagid  = "flag_not_set" if type == "clear" else type
+    label   = "Cleared flag" if type == "clear" else f"Flagged as {type}"
+    _bulk("setFlag", list(ids), label, flagid=flagid)
+
+
+@mail_app.command("tag")
+def mail_tag(
+    ids:   List[str] = typer.Argument(...),
+    label: str       = typer.Option(..., "--label", "-l", help="Label name or ID."),
+) -> None:
+    """Apply a label to messages."""
+    cfg        = _cfg()
+    email      = _require_account(cfg)
+    client     = _get_client(cfg, email)
+    account_id = _require_account_id(cfg, email)
+    label_id   = _resolve_label_id(client, account_id, label)
+    resp       = client.update_message(account_id, "applyLabel", list(ids), labelId=label_id)
+    status     = resp.get("data", {})
+    updated    = status.get("updatedMessages", list(ids))
+    utils.output_status(f"Applied label '{label}' to {len(updated)} message(s)", extra={"updated": updated})
+
+
+@mail_app.command("untag")
+def mail_untag(
+    ids:   List[str] = typer.Argument(...),
+    label: str       = typer.Option(..., "--label", "-l", help="Label name or ID."),
+) -> None:
+    """Remove a label from messages."""
+    cfg        = _cfg()
+    email      = _require_account(cfg)
+    client     = _get_client(cfg, email)
+    account_id = _require_account_id(cfg, email)
+    label_id   = _resolve_label_id(client, account_id, label)
+    resp       = client.update_message(account_id, "removeLabel", list(ids), labelId=label_id)
+    status     = resp.get("data", {})
+    updated    = status.get("updatedMessages", list(ids))
+    utils.output_status(f"Removed label '{label}' from {len(updated)} message(s)", extra={"updated": updated})
+
+
+@mail_app.command("untag-all")
+def mail_untag_all(ids: List[str] = typer.Argument(...)) -> None:
+    """Remove all labels from messages."""
+    _bulk("removeAllLabels", list(ids), "Removed all labels")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -641,6 +793,92 @@ def folders_delete(folder_id: str = typer.Argument(..., help="Folder ID.")) -> N
 
     client.delete_folder(account_id, folder_id)
     utils.output_status(f"Deleted folder {folder_id}", extra={"folderId": folder_id})
+
+
+@folders_app.command("empty")
+def folders_empty(folder_id: str = typer.Argument(..., help="Folder ID to empty.")) -> None:
+    """Delete all messages in a folder (e.g. empty Trash)."""
+    cfg        = _cfg()
+    email      = _require_account(cfg)
+    client     = _get_client(cfg, email)
+    account_id = _require_account_id(cfg, email)
+    client.folder_operation(account_id, folder_id, "emptyFolder")
+    utils.output_status(f"Emptied folder {folder_id}", extra={"folderId": folder_id})
+
+
+@folders_app.command("mark-read")
+def folders_mark_read(folder_id: str = typer.Argument(..., help="Folder ID.")) -> None:
+    """Mark all messages in a folder as read."""
+    cfg        = _cfg()
+    email      = _require_account(cfg)
+    client     = _get_client(cfg, email)
+    account_id = _require_account_id(cfg, email)
+    client.folder_operation(account_id, folder_id, "markAsRead")
+    utils.output_status(f"Marked all messages as read in folder {folder_id}", extra={"folderId": folder_id})
+
+
+@folders_app.command("move")
+def folders_move(
+    folder_id:        str = typer.Argument(..., help="Folder ID to move."),
+    parent_folder_id: str = typer.Option(..., "--parent-id", help="New parent folder ID."),
+) -> None:
+    """Move a folder under a new parent."""
+    cfg        = _cfg()
+    email      = _require_account(cfg)
+    client     = _get_client(cfg, email)
+    account_id = _require_account_id(cfg, email)
+    client.folder_operation(account_id, folder_id, "move", parentFolderId=parent_folder_id)
+    utils.output_status(f"Moved folder {folder_id}", extra={"folderId": folder_id, "parentFolderId": parent_folder_id})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# zoho labels …
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _md_labels(lbls: list) -> None:
+    rows = [[l.get("labelId", ""), l.get("labelName", ""), l.get("color", "")] for l in lbls]
+    print(utils.md_table(["ID", "NAME", "COLOR"], rows))
+
+
+@labels_app.command("list")
+def labels_list() -> None:
+    """List all labels."""
+    cfg        = _cfg()
+    email      = _require_account(cfg)
+    client     = _get_client(cfg, email)
+    account_id = _require_account_id(cfg, email)
+    resp       = client.get_labels(account_id)
+    result     = [
+        {"labelId": str(l.get("labelId", "")), "labelName": l.get("labelName", ""), "color": l.get("color", "")}
+        for l in resp.get("data", [])
+    ]
+    utils.output(result, md_render=_md_labels)
+
+
+@labels_app.command("create")
+def labels_create(
+    name:  str           = typer.Argument(..., help="Label name."),
+    color: Optional[str] = typer.Option(None, "--color", help="Hex color, e.g. #FF0000."),
+) -> None:
+    """Create a new label."""
+    cfg        = _cfg()
+    email      = _require_account(cfg)
+    client     = _get_client(cfg, email)
+    account_id = _require_account_id(cfg, email)
+    resp       = client.create_label(account_id, name, color=color)
+    lbl        = resp.get("data", resp)
+    utils.output_status(f"Created label '{name}'", extra={"labelId": str(lbl.get("labelId", ""))})
+
+
+@labels_app.command("delete")
+def labels_delete(label_id: str = typer.Argument(..., help="Label ID.")) -> None:
+    """Delete a label."""
+    cfg        = _cfg()
+    email      = _require_account(cfg)
+    client     = _get_client(cfg, email)
+    account_id = _require_account_id(cfg, email)
+    client.delete_label(account_id, label_id)
+    utils.output_status(f"Deleted label {label_id}", extra={"labelId": label_id})
 
 
 # ══════════════════════════════════════════════════════════════════════════════

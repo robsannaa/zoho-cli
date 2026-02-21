@@ -17,6 +17,7 @@ DEFAULT_SCOPES = [
     "ZohoMail.messages.ALL",
     "ZohoMail.folders.ALL",
     "ZohoMail.accounts.READ",
+    "ZohoMail.tags.ALL",
 ]
 
 # ── success page served to the browser after OAuth ───────────────────────────

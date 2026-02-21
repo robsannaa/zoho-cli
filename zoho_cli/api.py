@@ -109,6 +109,26 @@ class ZohoMailClient:
     def delete_folder(self, account_id: str, folder_id: str) -> dict:
         return self._delete(f"/accounts/{account_id}/folders/{folder_id}")
 
+    def folder_operation(self, account_id: str, folder_id: str, mode: str, **extra) -> dict:
+        """Generic folder mode operation (emptyFolder, markAsRead, move, etc.)."""
+        payload: dict[str, Any] = {"mode": mode}
+        payload.update(extra)
+        return self._put(f"/accounts/{account_id}/folders/{folder_id}", payload)
+
+    # ── labels ────────────────────────────────────────────────────────────────
+
+    def get_labels(self, account_id: str) -> dict:
+        return self._get(f"/accounts/{account_id}/labels")
+
+    def create_label(self, account_id: str, name: str, color: Optional[str] = None) -> dict:
+        payload: dict[str, Any] = {"labelName": name}
+        if color:
+            payload["color"] = color
+        return self._post_json(f"/accounts/{account_id}/labels", payload)
+
+    def delete_label(self, account_id: str, label_id: str) -> dict:
+        return self._delete(f"/accounts/{account_id}/labels/{label_id}")
+
     # ── messages ──────────────────────────────────────────────────────────────
 
     def get_messages(
