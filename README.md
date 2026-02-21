@@ -1,5 +1,8 @@
 # zoho — Zoho Mail in your terminal
 
+[![GitHub release](https://img.shields.io/github/v/release/robsannaa/zoho-cli)](https://github.com/robsannaa/zoho-cli/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Fast, script-friendly CLI for Zoho Mail. JSON output by default, Markdown tables with `--md`. Pipe to `jq`, use in scripts, or feed directly to AI agents.
 
 ```bash
