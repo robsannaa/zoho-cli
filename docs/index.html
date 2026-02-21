@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>zoho-cli — Zoho Mail in your terminal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    :root {
+      --bg: #000000;
+      --bg-glass: rgba(255, 255, 255, 0.03);
+      --text: #ffffff;
+      --text-secondary: rgba(255, 255, 255, 0.6);
+      --text-tertiary: rgba(255, 255, 255, 0.35);
+      --accent: #5eead4;
+      --accent-dim: rgba(94, 234, 212, 0.15);
+      --border: rgba(255, 255, 255, 0.08);
+      --success: #4ade80;
+    }
+    
+    html {
+      scroll-behavior: smooth;
+    }
+    
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    
+    /* Navigation */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 1rem 2rem;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+    
+    nav .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .logo {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 500;
+    }
+    
+    .nav-links {
+      display: flex;
+      gap: 2rem;
+    }
+    
+    .nav-links a {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.875rem;
+      transition: color 0.2s;
+    }
+    
+    .nav-links a:hover {
+      color: var(--text);
+    }
+    
+    .github-btn {
+      background: var(--text);
+      color: var(--bg);
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+    }
+    
+    /* Sections */
+    section {
+      padding: 4rem 2rem;
+      max-width: 800px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    
+    #hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      position: relative;
+    }
+    
+    .glow {
+      position: absolute;
+      top: 20%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(94, 234, 212, 0.08) 0%, transparent 70%);
+      filter: blur(60px);
+      pointer-events: none;
+    }
+    
+    .label {
+      font-size: 0.6875rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 1.5rem;
+    }
+    
+    h1 {
+      font-size: clamp(2.5rem, 8vw, 5rem);
+      font-weight: 400;
+      letter-spacing: -0.04em;
+      margin-bottom: 1rem;
+    }
+    
+    h1 .prompt {
+      color: var(--accent);
+    }
+    
+    /* Typewriter animation */
+    .typewriter {
+      display: inline;
+    }
+    
+    .cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1em;
+      background: var(--accent);
+      margin-left: 2px;
+      animation: blink 1s step-end infinite;
+      vertical-align: text-bottom;
+    }
+    
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0; }
+    }
+    
+    h2 {
+      font-size: clamp(1.25rem, 3vw, 1.75rem);
+      font-weight: 400;
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+    }
+    
+    p {
+      color: var(--text-secondary);
+      max-width: 500px;
+      margin: 0 auto 2rem;
+    }
+    
+    .buttons {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      margin-bottom: 3rem;
+    }
+    
+    .btn {
+      padding: 0.75rem 1.5rem;
+      border-radius: 9999px;
+      text-decoration: none;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      font-family: inherit;
+    }
+    
+    .btn-primary {
+      background: var(--text);
+      color: var(--bg);
+    }
+    
+    .btn-glass {
+      background: var(--bg-glass);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    
+    /* Terminal */
+    .terminal {
+      background: rgba(10, 10, 10, 0.8);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      max-width: 600px;
+      margin: 0 auto;
+      text-align: left;
+    }
+    
+    .terminal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--border);
+    }
+    
+    .dots {
+      display: flex;
+      gap: 0.5rem;
+    }
+    
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    
+    .dot-red { background: #ff5f57; }
+    .dot-yellow { background: #febc2e; }
+    .dot-green { background: #28c840; }
+    
+    .toggle-group {
+      display: flex;
+      gap: 0.25rem;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 0.25rem;
+      border-radius: 9999px;
+      border: 1px solid var(--border);
+    }
+    
+    .toggle-btn {
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      color: var(--text-tertiary);
+      font-family: inherit;
+    }
+    
+    .toggle-btn.active {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text);
+    }
+    
+    .terminal-content {
+      padding: 1.25rem;
+      font-size: 0.8125rem;
+    }
+    
+    .prompt {
+      color: var(--accent);
+    }
+    
+    /* Terminal typing animation */
+    .typing-line {
+      overflow: hidden;
+      white-space: nowrap;
+      animation: typing 2s steps(40, end);
+    }
+    
+    @keyframes typing {
+      from { width: 0; }
+      to { width: 100%; }
+    }
+    
+    /* Output fade in */
+    .fade-in {
+      opacity: 0;
+      animation: fadeIn 0.5s ease forwards;
+      animation-delay: 2s;
+    }
+    
+    @keyframes fadeIn {
+      to { opacity: 1; }
+    }
+    
+    pre {
+      color: var(--text-secondary);
+      overflow-x: auto;
+      margin-top: 0.75rem;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.75rem;
+      font-size: 0.75rem;
+    }
+    
+    th {
+      color: var(--accent);
+      text-align: left;
+      padding: 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    
+    td {
+      color: var(--text-secondary);
+      padding: 0.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    
+    /* Features */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem;
+      margin-top: 2rem;
+    }
+    
+    .feature-card {
+      background: var(--bg-glass);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      text-align: left;
+      transition: all 0.3s ease;
+    }
+    
+    .feature-card:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: var(--border-hover);
+    }
+    
+    .feature-num {
+      font-size: 0.6875rem;
+      color: var(--accent);
+      margin-bottom: 0.75rem;
+    }
+    
+    .feature-card h3 {
+      font-size: 1rem;
+      margin-bottom: 0.5rem;
+    }
+    
+    .feature-card p {
+      font-size: 0.875rem;
+      margin: 0;
+    }
+    
+    /* Installation */
+    .method-tabs {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+    
+    .method-tab {
+      padding: 0.625rem 1.25rem;
+      border-radius: 9999px;
+      font-size: 0.875rem;
+      cursor: pointer;
+      border: none;
+      background: var(--bg-glass);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      font-family: inherit;
+      transition: all 0.2s ease;
+    }
+    
+    .method-tab.active {
+      background: var(--text);
+      color: var(--bg);
+    }
+    
+    .method-tab:hover:not(.active) {
+      color: var(--text);
+    }
+    
+    .copy-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-tertiary);
+      cursor: pointer;
+      font-size: 0.75rem;
+      font-family: inherit;
+      transition: color 0.2s;
+    }
+    
+    .copy-btn:hover {
+      color: var(--accent);
+    }
+    
+    .success {
+      color: var(--success);
+      margin-top: 0.75rem;
+      opacity: 0;
+      animation: fadeIn 0.5s ease forwards;
+      animation-delay: 1.5s;
+    }
+    
+    .next-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 2rem;
+      color: var(--text-tertiary);
+      text-decoration: none;
+      font-size: 0.875rem;
+      transition: color 0.2s;
+    }
+    
+    .next-link:hover {
+      color: var(--accent);
+    }
+    
+    /* Commands */
+    .category-tabs {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+    
+    .command-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+    
+    .command-btn {
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
+      font-size: 0.875rem;
+      cursor: pointer;
+      border: none;
+      background: var(--bg-glass);
+      color: var(--text-tertiary);
+      border: 1px solid var(--border);
+      font-family: inherit;
+      transition: all 0.2s ease;
+    }
+    
+    .command-btn.active {
+      background: var(--accent-dim);
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+    
+    .command-btn:hover:not(.active) {
+      color: var(--text-secondary);
+    }
+    
+    /* Setup */
+    .step-card {
+      background: var(--bg-glass);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      margin-bottom: 1rem;
+      text-align: left;
+      transition: all 0.3s ease;
+    }
+    
+    .step-card:hover {
+      background: rgba(255, 255, 255, 0.06);
+    }
+    
+    .step-num {
+      font-size: 0.6875rem;
+      color: var(--accent);
+      margin-bottom: 0.5rem;
+    }
+    
+    .step-card h3 {
+      font-size: 1rem;
+      margin-bottom: 0.5rem;
+    }
+    
+    .step-card p {
+      margin-bottom: 1rem;
+    }
+    
+    .step-card ul {
+      list-style: none;
+    }
+    
+    .step-card li {
+      color: var(--text-tertiary);
+      font-size: 0.875rem;
+      padding: 0.25rem 0;
+    }
+    
+    .step-card a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    
+    .step-card a:hover {
+      text-decoration: underline;
+    }
+    
+    code {
+      background: rgba(255, 255, 255, 0.05);
+      padding: 0.125rem 0.375rem;
+      border-radius: 4px;
+      color: var(--accent);
+      font-size: 0.75rem;
+    }
+    
+    .regions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: center;
+      margin-top: 1rem;
+    }
+    
+    .region-tag {
+      background: var(--bg-glass);
+      padding: 0.375rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+    
+    /* Footer */
+    footer {
+      padding: 3rem 2rem;
+      border-top: 1px solid var(--border);
+      text-align: center;
+    }
+    
+    footer .logo {
+      margin-bottom: 1rem;
+      display: inline-block;
+    }
+    
+    footer .links {
+      display: flex;
+      gap: 1.5rem;
+      justify-content: center;
+      margin-bottom: 1rem;
+    }
+    
+    footer a {
+      color: var(--text-tertiary);
+      text-decoration: none;
+      font-size: 0.875rem;
+      transition: color 0.2s;
+    }
+    
+    footer a:hover {
+      color: var(--text);
+    }
+    
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.6875rem;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--success);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .version {
+      position: absolute;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.6875rem;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    
+    /* Mobile */
+    @media (max-width: 768px) {
+      .nav-links {
+        display: none;
+      }
+      
+      .features-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      h1 {
+        font-size: 2.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav>
+    <div class="container">
+      <a href="#" class="logo">$ zoho-cli</a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#installation">Install</a>
+        <a href="#commands">Commands</a>
+        <a href="#setup">Setup</a>
+      </div>
+      <a href="https://github.com/robsannaa/zoho-cli" class="github-btn" target="_blank">GitHub</a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section id="hero">
+    <div class="glow"></div>
+    <div class="label">Command Line Interface</div>
+    <h1>
+      <span class="prompt">$</span> 
+      <span class="typewriter" id="typewriter"></span>
+      <span class="cursor"></span>
+    </h1>
+    <h2>Zoho Mail in your terminal</h2>
+    <p>A fast, script-friendly CLI for Zoho Mail. JSON by default. Pipe to jq. Integrate with your workflows.</p>
+    <div class="buttons">
+      <a href="#installation" class="btn btn-primary">Get Started</a>
+      <a href="https://github.com/robsannaa/zoho-cli" class="btn btn-glass" target="_blank">GitHub</a>
+    </div>
+    
+    <div class="terminal">
+      <div class="terminal-header">
+        <div class="dots">
+          <div class="dot dot-red"></div>
+          <div class="dot dot-yellow"></div>
+          <div class="dot dot-green"></div>
+        </div>
+        <div class="toggle-group">
+          <button class="toggle-btn active" onclick="showJSON()">JSON</button>
+          <button class="toggle-btn" onclick="showMD()">Markdown</button>
+        </div>
+      </div>
+      <div class="terminal-content">
+        <div class="typing-line">
+          <span class="prompt">$</span> <span id="command">zoho mail list</span>
+        </div>
+        <pre class="fade-in" id="output">[
+  {
+    "messageId": "1771333290108014300",
+    "subject": "Q1 invoice attached",
+    "from": "billing@acme.com",
+    "date": "1740067200000",
+    "unread": true,
+    "hasAttachments": true
+  },
+  {
+    "messageId": "1771333290108014301",
+    "subject": "Meeting notes",
+    "from": "team@company.com",
+    "date": "1740063600000",
+    "unread": false,
+    "hasAttachments": false
+  }
+]</pre>
+        <table class="fade-in" id="md-table" style="display: none;">
+          <thead>
+            <tr><th>ID</th><th>FROM</th><th>SUBJECT</th><th>DATE</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>1771333290108014300</td><td>billing@acme.com</td><td>Q1 invoice attached</td><td>Feb 20</td></tr>
+            <tr><td>1771333290108014301</td><td>team@company.com</td><td>Meeting notes</td><td>Feb 20</td></tr>
+          </tbody>
+        </table>
+        <div class="fade-in" style="margin-top: 0.75rem;">
+          <span class="prompt">$</span> <span class="cursor" style="animation: blink 1s step-end infinite;"></span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="version">v0.1.1</div>
+  </section>
+
+  <!-- Features -->
+  <section id="features">
+    <div class="label">Features</div>
+    <h2>Everything you need</h2>
+    <p>A complete toolkit for managing Zoho Mail from the command line</p>
+    
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-num">01</div>
+        <h3>JSON by default</h3>
+        <p>Structured output for scripts and automation</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-num">02</div>
+        <h3>Markdown tables</h3>
+        <p>Human-readable format with --md flag</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-num">03</div>
+        <h3>OAuth authentication</h3>
+        <p>Secure browser-based login</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-num">04</div>
+        <h3>Multi-account support</h3>
+        <p>Switch between accounts seamlessly</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-num">05</div>
+        <h3>Folder management</h3>
+        <p>Create, rename, organize programmatically</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-num">06</div>
+        <h3>Script-friendly</h3>
+        <p>Designed for automation workflows</p>
+      </div>
+    </div>
+    
+    <div class="terminal" style="margin-top: 3rem;">
+      <div class="terminal-header">
+        <span style="font-size: 0.6875rem; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.1em;">Example</span>
+      </div>
+      <div class="terminal-content">
+        <span style="color: var(--text-tertiary);"># Filter unread emails</span><br>
+        <span class="prompt">$</span> zoho mail list | jq -r '.[] | select(.unread) | .subject'
+        <div class="success">Q1 invoice attached<br>Meeting notes</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Installation -->
+  <section id="installation">
+    <div class="label">Installation</div>
+    <h2>Get started</h2>
+    <p>Python 3.11+ required. Works on macOS, Linux, and Windows.</p>
+    
+    <div class="method-tabs">
+      <button class="method-tab active" onclick="setMethod('homebrew')">brew</button>
+      <button class="method-tab" onclick="setMethod('uv')">uv</button>
+      <button class="method-tab" onclick="setMethod('pipx')">pipx</button>
+    </div>
+    
+    <div class="terminal">
+      <div class="terminal-header">
+        <div class="dots">
+          <div class="dot dot-red"></div>
+          <div class="dot dot-yellow"></div>
+          <div class="dot dot-green"></div>
+        </div>
+        <button class="copy-btn" onclick="copyCommand()">Copy</button>
+      </div>
+      <div class="terminal-content">
+        <div class="typing-line">
+          <span class="prompt">$</span> <span id="install-cmd">brew install robsannaa/tap/zoho-cli</span>
+        </div>
+        <div class="success" id="install-output">Installed zoho-cli</div>
+      </div>
+    </div>
+    
+    <a href="#setup" class="next-link">
+      Next: Configure OAuth
+      <span style="width: 18px; height: 18px; border: 1px solid currentColor; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px;">↓</span>
+    </a>
+  </section>
+
+  <!-- Commands -->
+  <section id="commands">
+    <div class="label">Commands</div>
+    <h2>CLI Reference</h2>
+    <p>Explore available commands and their output formats</p>
+    
+    <div class="category-tabs">
+      <button class="method-tab active" onclick="setCategory('mail')">mail</button>
+      <button class="method-tab" onclick="setCategory('folders')">folders</button>
+      <button class="method-tab" onclick="setCategory('config')">config</button>
+    </div>
+    
+    <div class="command-list" id="command-list">
+      <button class="command-btn active" onclick="setCommand('list')">list</button>
+      <button class="command-btn" onclick="setCommand('search')">search</button>
+      <button class="command-btn" onclick="setCommand('get')">get</button>
+      <button class="command-btn" onclick="setCommand('send')">send</button>
+    </div>
+    
+    <div class="terminal">
+      <div class="terminal-header">
+        <span style="font-size: 0.6875rem; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.1em;">Output</span>
+        <div class="toggle-group">
+          <button class="toggle-btn active" onclick="showCmdJSON()">JSON</button>
+          <button class="toggle-btn" onclick="showCmdMD()">Markdown</button>
+        </div>
+      </div>
+      <div class="terminal-content">
+        <pre id="cmd-output">[
+  {
+    "messageId": "1771333290108014300",
+    "subject": "Q1 invoice attached",
+    "from": "billing@acme.com",
+    "date": "1740067200000",
+    "unread": true
+  }
+]</pre>
+        <table id="cmd-md-table" style="display: none;">
+          <thead>
+            <tr><th>ID</th><th>FROM</th><th>SUBJECT</th><th>DATE</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>1771333290108014300</td><td>billing@acme.com</td><td>Q1 invoice attached</td><td>Feb 20</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    
+    <div style="margin-top: 2rem;">
+      <div class="label" style="margin-bottom: 1rem;">Global Flags</div>
+      <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center;">
+        <div class="feature-card" style="padding: 0.75rem 1rem;"><code>--account</code><br><span style="font-size: 0.75rem; color: var(--text-tertiary);">Specify account</span></div>
+        <div class="feature-card" style="padding: 0.75rem 1rem;"><code>--md</code><br><span style="font-size: 0.75rem; color: var(--text-tertiary);">Markdown output</span></div>
+        <div class="feature-card" style="padding: 0.75rem 1rem;"><code>--debug</code><br><span style="font-size: 0.75rem; color: var(--text-tertiary);">Debug logs</span></div>
+        <div class="feature-card" style="padding: 0.75rem 1rem;"><code>--config</code><br><span style="font-size: 0.75rem; color: var(--text-tertiary);">Config path</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Setup -->
+  <section id="setup">
+    <div class="label">Setup</div>
+    <h2>Get connected</h2>
+    <p>Three steps to connect your Zoho Mail account. Region auto-detected.</p>
+    
+    <div class="step-card">
+      <div class="step-num">01</div>
+      <h3>Create OAuth client</h3>
+      <p>Go to Zoho API Console and create a Mobile/Desktop Application client.</p>
+      <ul>
+        <li>Visit <a href="https://api-console.zoho.com/" target="_blank">api-console.zoho.com ↗</a></li>
+        <li>Click "Add Client" → "Mobile/Desktop"</li>
+        <li>Set name: <code>zoho-cli</code></li>
+        <li>Add redirect: <code>http://localhost:51821/callback</code></li>
+      </ul>
+    </div>
+    
+    <div class="step-card">
+      <div class="step-num">02</div>
+      <h3>Save credentials</h3>
+      <p>Run the config command and enter your Client ID and Secret.</p>
+      <ul>
+        <li>Run: <code>zoho config init</code></li>
+        <li>Enter Client ID</li>
+        <li>Enter Client Secret</li>
+        <li>Config saved to <code>~/.config/zoho-cli/</code></li>
+      </ul>
+    </div>
+    
+    <div class="step-card">
+      <div class="step-num">03</div>
+      <h3>Authenticate</h3>
+      <p>Log in to Zoho and authorize the CLI.</p>
+      <ul>
+        <li>Run: <code>zoho login</code></li>
+        <li>Browser opens automatically</li>
+        <li>Approve access in Zoho</li>
+        <li>Tokens stored in OS keyring</li>
+      </ul>
+    </div>
+    
+    <div class="step-card" style="text-align: center;">
+      <div class="label" style="margin-bottom: 1rem;">Supported Regions</div>
+      <p style="margin-bottom: 1rem;">Auto-detects your Zoho data center. No configuration needed.</p>
+      <div class="regions">
+        <span class="region-tag">zoho.com</span>
+        <span class="region-tag">zoho.eu</span>
+        <span class="region-tag">zoho.in</span>
+        <span class="region-tag">zoho.com.au</span>
+        <span class="region-tag">zoho.jp</span>
+        <span class="region-tag">zoho.ca</span>
+      </div>
+    </div>
+    
+    <div class="step-card" style="text-align: center; padding: 1rem;">
+      <p style="margin: 0; font-size: 0.875rem;"><span style="color: var(--accent);">Tip:</span> For CI/headless, use <code>zoho login --no-browser</code></p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <a href="#" class="logo">$ zoho-cli</a>
+    <div class="links">
+      <a href="https://github.com/robsannaa/zoho-cli" target="_blank">GitHub</a>
+      <a href="https://github.com/robsannaa/zoho-cli/issues" target="_blank">Issues</a>
+      <a href="https://github.com/robsannaa/zoho-cli/releases" target="_blank">Releases</a>
+    </div>
+    <div class="status">
+      MIT License
+      <div class="status-dot"></div>
+    </div>
+    <p style="margin-top: 1.5rem; font-size: 0.75rem; color: var(--text-tertiary);">
+      Built by <a href="https://github.com/robsannaa" target="_blank" style="color: var(--text-secondary);">robsannaa</a>
+    </p>
+  </footer>
+
+  <script>
+    // Typewriter effect for title
+    const titleText = 'zoho-cli';
+    let charIndex = 0;
+    function typeWriter() {
+      if (charIndex < titleText.length) {
+        document.getElementById('typewriter').textContent += titleText.charAt(charIndex);
+        charIndex++;
+        setTimeout(typeWriter, 100);
+      }
+    }
+    // Start typewriter after a short delay
+    setTimeout(typeWriter, 500);
+    
+    // Hero terminal toggle
+    function showJSON() {
+      document.querySelectorAll('#hero .toggle-btn')[0].classList.add('active');
+      document.querySelectorAll('#hero .toggle-btn')[1].classList.remove('active');
+      document.getElementById('command').textContent = 'zoho mail list';
+      document.getElementById('output').style.display = 'block';
+      document.getElementById('md-table').style.display = 'none';
+    }
+    
+    function showMD() {
+      document.querySelectorAll('#hero .toggle-btn')[0].classList.remove('active');
+      document.querySelectorAll('#hero .toggle-btn')[1].classList.add('active');
+      document.getElementById('command').textContent = 'zoho --md mail list';
+      document.getElementById('output').style.display = 'none';
+      document.getElementById('md-table').style.display = 'table';
+    }
+    
+    // Installation
+    const installCommands = {
+      homebrew: { cmd: 'brew install robsannaa/tap/zoho-cli', out: 'Installed zoho-cli' },
+      uv: { cmd: 'uv tool install git+https://github.com/robsannaa/zoho-cli', out: 'Installed zoho-cli' },
+      pipx: { cmd: 'pipx install git+https://github.com/robsannaa/zoho-cli', out: 'done!' }
+    };
+    
+    function setMethod(method) {
+      document.querySelectorAll('.method-tab').forEach((tab, i) => {
+        tab.classList.toggle('active', i === ['homebrew', 'uv', 'pipx'].indexOf(method));
+      });
+      document.getElementById('install-cmd').textContent = installCommands[method].cmd;
+      document.getElementById('install-output').textContent = installCommands[method].out;
+    }
+    
+    function copyCommand() {
+      const cmd = document.getElementById('install-cmd').textContent;
+      navigator.clipboard.writeText(cmd);
+      const btn = document.querySelector('.copy-btn');
+      btn.textContent = 'Copied!';
+      setTimeout(() => btn.textContent = 'Copy', 2000);
+    }
+    
+    // Commands
+    const commands = {
+      mail: ['list', 'search', 'get', 'send'],
+      folders: ['list', 'create', 'rename'],
+      config: ['init', 'show']
+    };
+    
+    const outputs = {
+      'mail-list': `[
+  {
+    "messageId": "1771333290108014300",
+    "subject": "Q1 invoice attached",
+    "from": "billing@acme.com",
+    "date": "1740067200000",
+    "unread": true
+  }
+]`,
+      'mail-search': `[
+  {
+    "messageId": "1771333290108014300",
+    "subject": "Q1 invoice attached",
+    "from": "billing@acme.com"
+  }
+]`,
+      'mail-get': `{
+  "messageId": "1771333290108014300",
+  "subject": "Q1 invoice attached",
+  "from": "billing@acme.com",
+  "textBody": "Please find the attached invoice...",
+  "hasAttachments": true
+}`,
+      'mail-send': `{
+  "status": "success",
+  "messageId": "1771333290108014301"
+}`,
+      'folders-list': `[
+  { "folderId": "1", "folderName": "Inbox", "unreadCount": 5 },
+  { "folderId": "2", "folderName": "Sent", "unreadCount": 0 }
+]`,
+      'folders-create': `{
+  "status": "success",
+  "folderId": "456",
+  "folderName": "Project X"
+}`,
+      'folders-rename': `{
+  "status": "success"
+}`,
+      'config-init': `{
+  "status": "saved",
+  "path": "~/.config/zoho-cli/config.json"
+}`,
+      'config-show': `{
+  "client_id": "1000.XXXXXXXXX",
+  "default_account": "you@example.com"
+}`
+    };
+    
+    let currentCategory = 'mail';
+    let currentCommand = 'list';
+    let isJSON = true;
+    
+    function setCategory(cat) {
+      currentCategory = cat;
+      currentCommand = commands[cat][0];
+      updateCategoryTabs();
+      updateCommandList();
+      updateOutput();
+    }
+    
+    function setCommand(cmd) {
+      currentCommand = cmd;
+      updateCommandButtons();
+      updateOutput();
+    }
+    
+    function updateCategoryTabs() {
+      document.querySelectorAll('.category-tabs .method-tab').forEach((tab, i) => {
+        tab.classList.toggle('active', i === ['mail', 'folders', 'config'].indexOf(currentCategory));
+      });
+    }
+    
+    function updateCommandList() {
+      const list = document.getElementById('command-list');
+      list.innerHTML = commands[currentCategory].map(cmd => 
+        `<button class="command-btn ${cmd === currentCommand ? 'active' : ''}" onclick="setCommand('${cmd}')">${cmd}</button>`
+      ).join('');
+    }
+    
+    function updateCommandButtons() {
+      document.querySelectorAll('.command-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.textContent === currentCommand);
+      });
+    }
+    
+    function updateOutput() {
+      const key = `${currentCategory}-${currentCommand}`;
+      const output = outputs[key] || '{}';
+      
+      if (isJSON) {
+        document.getElementById('cmd-output').textContent = output;
+        document.getElementById('cmd-output').style.display = 'block';
+        document.getElementById('cmd-md-table').style.display = 'none';
+      } else {
+        // Simple MD conversion
+        const lines = output.split('\n').filter(l => l.trim() && !l.includes('{') && !l.includes('}') && !l.includes('[') && !l.includes(']'));
+        const headers = ['FIELD', 'VALUE'];
+        const rows = lines.map(l => {
+          const match = l.match(/"([^"]+)":\s*"?([^","]+)"?/);
+          return match ? [match[1], match[2]] : null;
+        }).filter(Boolean);
+        
+        let html = '<thead><tr>' + headers.map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>';
+        rows.forEach(row => {
+          html += '<tr>' + row.map(c => `<td>${c}</td>`).join('') + '</tr>';
+        });
+        html += '</tbody>';
+        
+        document.getElementById('cmd-md-table').innerHTML = html;
+        document.getElementById('cmd-output').style.display = 'none';
+        document.getElementById('cmd-md-table').style.display = 'table';
+      }
+    }
+    
+    function showCmdJSON() {
+      isJSON = true;
+      document.querySelectorAll('#commands .toggle-btn')[0].classList.add('active');
+      document.querySelectorAll('#commands .toggle-btn')[1].classList.remove('active');
+      updateOutput();
+    }
+    
+    function showCmdMD() {
+      isJSON = false;
+      document.querySelectorAll('#commands .toggle-btn')[0].classList.remove('active');
+      document.querySelectorAll('#commands .toggle-btn')[1].classList.add('active');
+      updateOutput();
+    }
+  </script>
+</body>
+</html>
