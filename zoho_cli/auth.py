@@ -218,6 +218,10 @@ def build_auth_url(client_id: str, redirect_uri: str, scopes: list[str]) -> str:
         "response_type": "code",
         "redirect_uri": redirect_uri,
         "access_type": "offline",
+        # prompt=consent forces Zoho to show the consent screen and re-issue a
+        # refresh_token every time. Without this, Zoho skips the refresh_token
+        # on subsequent logins because it considers the app already authorized.
+        "prompt": "consent",
     }
     return f"{base}/oauth/v2/auth?{urlencode(params)}"
 

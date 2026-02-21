@@ -35,8 +35,6 @@ $ zoho --md mail list
 ```bash
 # Homebrew (macOS / Linux)
 brew install robsannaa/tap/zoho-cli
-# If you see "missing dependency 'idna'" (or similar), run: brew reinstall zoho-cli
-# Tap maintainers: ensure the formula lists all deps (e.g. brew update-python-resources zoho-cli in the tap repo).
 
 # uv (all platforms)
 uv tool install git+https://github.com/robsannaa/zoho-cli
@@ -59,9 +57,7 @@ uv tool install .
 
 ### 1 — Create an OAuth client in Zoho
 
-1. Go to **[api-console.zoho.com](https://api-console.zoho.com/)** (or your regional console, e.g. [api-console.zoho.eu](https://api-console.zoho.eu/)) → **Add Client** → **Mobile/Desktop Application**.
-
-   > **Important:** You must choose **Mobile/Desktop Application**, not "Server-based Applications". Only this client type allows `localhost` redirect URIs.
+1. Go to **[api-console.zoho.com](https://api-console.zoho.com/)** → **Add Client** → **Server-based Application**.
 
 2. Fill in:
 
@@ -77,24 +73,28 @@ uv tool install .
 
 3. Copy the **Client ID** and **Client Secret**.
 
-### 2 — Save credentials
+### 2 — Run the setup wizard
 
 ```bash
 zoho config init
 ```
 
-Writes to the platform config dir:
+The wizard walks you through entering your credentials, saves the config, then offers to open the browser and log you in immediately — so steps 2 and 3 are one command.
+
+Config is saved to the platform config dir:
 - macOS: `~/Library/Application Support/zoho-cli/config.json`
 - Linux: `~/.config/zoho-cli/config.json`
 - Windows: `%APPDATA%\zoho-cli\config.json`
 
-### 3 — Log in
+If you prefer to log in separately:
 
 ```bash
 zoho login
 ```
 
-Your browser opens, you approve access, and a "You're connected" page confirms success. Tokens are stored in your OS keyring — you never log in again.
+Your browser opens, you approve access on Zoho's consent screen, and a "You're connected" page confirms the callback was received. Tokens are stored in your OS keyring.
+
+> **Note:** The consent screen appears every time you run `zoho login`. This is intentional — it ensures Zoho always issues a fresh token.
 
 **Region is auto-detected** — the CLI probes all Zoho data centres in parallel and picks the right one for your client ID. EU, India, Australia, Japan, Canada accounts all work without any extra config.
 
@@ -320,7 +320,20 @@ zoho mail list
 
 ## Troubleshooting
 
+**Homebrew: `ModuleNotFoundError: No module named 'idna'`** — You're on an old formula that didn't install all Python deps. Upgrade to the latest formula (0.1.5+), which includes them:
+
+```bash
+brew update && brew upgrade zoho-cli
+```
+
+Check version with `zoho -v`; you should see 0.1.5 or newer. If the error persists, the tap formula may need its resources refreshed. In the [tap repo](https://github.com/robsannaa/homebrew-tap) run `brew update-python-resources robsannaa/tap/zoho-cli`, commit the updated `Formula/zoho-cli.rb`, push, then on your Mac run `brew update && brew upgrade zoho-cli` again.
+
 **`No stored token`** → run `zoho login --account you@example.com`.
+
+**`oauth_no_refresh_token`** → Zoho didn't issue a refresh token. Either:
+
+- The app's **Access Type** in the API console is set to **Online** instead of **Offline** — open [api-console.zoho.com](https://api-console.zoho.com/), edit your client, set Access Type to Offline.
+- Or a previous failed login left a stale authorization on Zoho's side. Go to [accounts.zoho.com/apiauthstatus](https://accounts.zoho.com/apiauthstatus) (use `.eu`/`.in`/etc. for your region), revoke **zoho-cli**, then run `zoho login` again.
 
 **`token_refresh_failed HTTP 400`** → refresh token revoked (password change, client regenerated). Run `zoho login` again.
 

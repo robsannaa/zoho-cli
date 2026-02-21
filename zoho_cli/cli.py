@@ -281,8 +281,27 @@ def login(
         code, client_id, client_secret, redirect_uri,
         accounts_base_url=accounts_server,
     )
-    refresh_token = token_resp["refresh_token"]
     access_token  = token_resp["access_token"]
+    refresh_token = token_resp.get("refresh_token")
+
+    if not refresh_token:
+        # Zoho omits refresh_token when:
+        #   - the app's "Access Type" in the API console is set to "Online", or
+        #   - the user previously authorized this app (tokens are not re-issued).
+        # Fall back to the refresh_token already in storage, if one exists.
+        existing = storage.load_token(email)
+        refresh_token = (existing or {}).get("refresh_token")
+        if not refresh_token:
+            utils.error_exit(
+                "oauth_no_refresh_token",
+                "Zoho did not return a refresh_token.\n\n"
+                "To fix, revoke the app's existing authorization so Zoho issues a fresh one:\n"
+                "  1. Open https://accounts.zoho.com/apiauthstatus  (use .eu/.in/etc. for your region)\n"
+                "  2. Find 'zoho-cli' and click Revoke\n"
+                "  3. Run `zoho login` again\n\n"
+                "If the problem persists, check that your API Console client has 'Access Type: Offline'.",
+            )
+        _stderr("Note: Zoho did not issue a new refresh_token; keeping the existing stored one.")
 
     storage.store_token(email, refresh_token, scopes, accounts_server=accounts_server)
 
@@ -646,27 +665,83 @@ def config_path_cmd() -> None:
 
 @config_app.command("init")
 def config_init() -> None:
-    """Interactively create or update configuration."""
-    cfg = _cfg()
-    p   = _config.config_path(_S.config_path)
-    _stderr(f"Config: {p}")
-    _stderr("Press Enter to keep existing values.\n")
+    """First-time setup wizard — configure credentials and optionally log in."""
+    cfg          = _cfg()
+    p            = _config.config_path(_S.config_path)
+    is_first_run = not p.exists()
 
-    cfg["client_id"] = click.prompt(
-        "Zoho OAuth Client ID", default=cfg.get("client_id", ""), err=True,
-    ).strip()
-    cfg["client_secret"] = click.prompt(
-        "Zoho OAuth Client Secret",
-        default=cfg.get("client_secret", ""),
-        hide_input=True, confirmation_prompt=False, err=True,
-    ).strip()
-    cfg["redirect_uri"] = click.prompt(
-        "Redirect URI (for --no-browser mode)",
-        default=cfg.get("redirect_uri", "https://example.com/zoho/oauth/callback"),
-        err=True,
-    ).strip()
-    cfg["default_account"] = click.prompt(
-        "Default account e-mail", default=cfg.get("default_account", ""), err=True,
-    ).strip()
+    # ── header ────────────────────────────────────────────────────────────────
+    _stderr("")
+    _stderr("══════════════════════════════════════════════════")
+    _stderr("  zoho-cli — " + ("First-Time Setup" if is_first_run else "Update Configuration"))
+    _stderr("══════════════════════════════════════════════════")
+    _stderr("")
+
+    _stderr("Get your credentials at:  https://api-console.zoho.com/")
+    _stderr("")
+    _stderr("  1. Click 'Add Client' → 'Server-based Application'")
+    _stderr("  2. Add redirect URI:   http://localhost:51821/")
+    _stderr("  3. Copy the Client ID and Secret from that page.")
+    _stderr("")
+    if is_first_run:
+        _stderr("Press Ctrl+C at any time to abort.")
+    else:
+        _stderr(f"Config: {p}  (press Enter to keep existing values)")
+    _stderr("")
+
+    # ── prompt helpers ────────────────────────────────────────────────────────
+    def _required(label: str, **kw) -> str:
+        """Keep prompting until the user provides a non-empty value."""
+        while True:
+            val = click.prompt(label, err=True, **kw).strip()
+            if val:
+                return val
+            _stderr("  (this field is required)")
+
+    def _optional(label: str, current: str, **kw) -> str:
+        return click.prompt(label, default=current, err=True, **kw).strip()
+
+    # ── credentials ───────────────────────────────────────────────────────────
+    existing_id  = cfg.get("client_id", "")
+    existing_sec = cfg.get("client_secret", "")
+
+    if existing_id:
+        cfg["client_id"] = _optional("Zoho OAuth Client ID", existing_id)
+    else:
+        cfg["client_id"] = _required("Zoho OAuth Client ID")
+
+    if existing_sec:
+        cfg["client_secret"] = _optional(
+            "Zoho OAuth Client Secret", existing_sec,
+            hide_input=True, confirmation_prompt=False,
+        )
+    else:
+        cfg["client_secret"] = _required(
+            "Zoho OAuth Client Secret",
+            hide_input=True, confirmation_prompt=False,
+        )
+
+    # ── account e-mail ────────────────────────────────────────────────────────
+    existing_email = cfg.get("default_account", "")
+    if existing_email:
+        cfg["default_account"] = _optional("Default account e-mail", existing_email)
+    else:
+        cfg["default_account"] = _required("Default account e-mail")
+
+    # ── redirect URI (advanced, only shown when updating) ─────────────────────
+    if not is_first_run:
+        cfg["redirect_uri"] = _optional(
+            "Redirect URI (--no-browser mode)",
+            cfg.get("redirect_uri", "https://example.com/zoho/oauth/callback"),
+        )
+
+    # ── save ──────────────────────────────────────────────────────────────────
     _config.save(cfg, _S.config_path)
-    utils.output_status(f"Config saved", extra={"config_path": str(p)})
+    _stderr("")
+    _stderr(f"✓  Config saved → {p}")
+    _stderr("")
+
+    # ── offer to log in immediately ───────────────────────────────────────────
+    if click.confirm("Log in now via browser OAuth?", default=True, err=True):
+        _stderr("")
+        login(account=cfg["default_account"])
