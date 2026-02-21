@@ -55,8 +55,8 @@ def _global(
     config_path: Optional[str] = typer.Option(
         None, "--config", envvar="ZOHO_CONFIG", help="Path to config.json.",
     ),
-    debug: bool = typer.Option(False, "--debug", is_flag=True, help="Log HTTP/debug to stderr."),
-    md: bool    = typer.Option(False, "--md", is_flag=True, help="Markdown output instead of JSON."),
+    debug: bool = typer.Option(False, "--debug", help="Log HTTP/debug to stderr."),
+    md: bool    = typer.Option(False, "--md", help="Markdown output instead of JSON."),
 ) -> None:
     _S.account     = account
     _S.config_path = config_path
@@ -178,7 +178,7 @@ def login(
         51821, "--port", help="Local port for the OAuth callback server.",
     ),
     no_browser: bool = typer.Option(
-        False, "--no-browser", is_flag=True,
+        False, "--no-browser",
         help="Print the URL instead of opening a browser (headless/remote use).",
     ),
 ) -> None:
@@ -509,7 +509,7 @@ def mail_unarchive(ids: List[str] = typer.Argument(...)) -> None:
 @mail_app.command("delete")
 def mail_delete(
     ids:       List[str] = typer.Argument(...),
-    permanent: bool      = typer.Option(False, "--permanent", is_flag=True, help="Hard delete."),
+    permanent: bool      = typer.Option(False, "--permanent", help="Hard delete."),
 ) -> None:
     """Delete messages (Trash by default; --permanent for hard delete)."""
     mode  = "hardDelete" if permanent else "moveToTrash"
