@@ -1,7 +1,9 @@
-# When you publish a release, open a PR (or push) to update the formula in robsannaa/tap.
-# Add secret HOMEBREW_TAP_TOKEN: a PAT with "public_repo" and "workflow" (or "repo") scope.
-# Tap maintainers: after merging the bump PR, run "brew update-python-resources zoho-cli"
-# in the tap repo so all transitive deps (e.g. idna) are listed in the formula.
+# On every release, update the formula in robsannaa/tap:
+#   1. Patch the URL and SHA256 to the new tarball
+#   2. Run `brew update-python-resources` to regenerate ALL resource stanzas
+#      (this ensures transitive deps like `idna` are never missing)
+#
+# Required secret: HOMEBREW_TAP_TOKEN — PAT with `public_repo` + `workflow` scope
 name: Bump Homebrew formula
 
 on:
@@ -10,12 +12,52 @@ on:
 
 jobs:
   bump:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
-      - name: Bump Homebrew formula
-        uses: dawidd6/action-homebrew-bump-formula@v3
-        with:
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          tap: robsannaa/tap
-          formula: zoho-cli
-          no_fork: true
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+
+      - name: Tap robsannaa/tap
+        run: brew tap robsannaa/tap
+
+      - name: Compute tarball SHA-256
+        id: info
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          URL="https://github.com/${{ github.repository }}/archive/refs/tags/${TAG}.tar.gz"
+          SHA=$(curl -fsSL "$URL" | shasum -a 256 | awk '{print $1}')
+          VERSION="${TAG#v}"
+          echo "tag=$TAG"       >> "$GITHUB_OUTPUT"
+          echo "url=$URL"       >> "$GITHUB_OUTPUT"
+          echo "sha=$SHA"       >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Patch formula URL + SHA
+        run: |
+          FORMULA="$(brew formula robsannaa/tap/zoho-cli)"
+          python3 - "$FORMULA" "${{ steps.info.outputs.url }}" "${{ steps.info.outputs.sha }}" <<'PY'
+          import sys, re
+          path, url, sha = sys.argv[1], sys.argv[2], sys.argv[3]
+          text = open(path).read()
+          # Replace only the top-level url (first occurrence, before any resource block)
+          text = re.sub(r'(?m)^  url "https://github\.com/[^"]*"', f'  url "{url}"', text, count=1)
+          # Replace only the top-level sha256 (first occurrence)
+          text = re.sub(r'(?m)^  sha256 "[0-9a-f]+"', f'  sha256 "{sha}"', text, count=1)
+          open(path, 'w').write(text)
+          PY
+
+      - name: Regenerate all Python resource stanzas
+        run: brew update-python-resources robsannaa/tap/zoho-cli
+
+      - name: Commit and push to tap
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          REPO_DIR="$(brew --repo robsannaa/tap)"
+          cd "$REPO_DIR"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git add Formula/zoho-cli.rb
+          git diff --staged --quiet && echo "No changes." && exit 0
+          git commit -m "zoho-cli ${{ steps.info.outputs.version }}"
+          git push "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/robsannaa/homebrew-tap.git" HEAD:main
