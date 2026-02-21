@@ -162,8 +162,18 @@ def browser_login_flow(
     else:
         print(f"Waiting for callback on {redirect_uri} …\n", file=sys.stderr)
 
-    server.timeout = 300  # 5-minute timeout
-    server.handle_request()
+    # Loop until we receive the request that contains the OAuth code.
+    # A single handle_request() is not enough: browsers often fire
+    # additional requests (favicon, preflight, etc.) before the real
+    # callback arrives, which would consume the one-shot slot and leave
+    # the server closed when the actual redirect comes in.
+    import time
+    deadline = time.monotonic() + 300  # 5-minute wall-clock limit
+    server.timeout = 2  # short select() interval so we can check deadline
+    while not result.get("code"):
+        if time.monotonic() > deadline:
+            break
+        server.handle_request()
     server.server_close()
 
     code = result.get("code", "")
