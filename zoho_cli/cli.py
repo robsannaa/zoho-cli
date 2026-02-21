@@ -744,4 +744,4 @@ def config_init() -> None:
     # ── offer to log in immediately ───────────────────────────────────────────
     if click.confirm("Log in now via browser OAuth?", default=True, err=True):
         _stderr("")
-        login(account=cfg["default_account"])
+        login(account=cfg["default_account"], port=51821, no_browser=False)
