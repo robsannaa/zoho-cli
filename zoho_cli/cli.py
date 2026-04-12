@@ -148,6 +148,23 @@ def _stderr(msg: str) -> None:
     print(msg, file=sys.stderr)
 
 
+def _confirm_outbound(*, action: str, recipients: str, subject: str, yes: bool) -> None:
+    """Require explicit confirmation before sending outbound emails."""
+    if yes:
+        return
+    if not sys.stdin.isatty():
+        utils.error_exit(
+            "confirmation_required",
+            "Refusing to send in non-interactive mode without --yes.",
+        )
+    if not click.confirm(
+        f"{action} email to {recipients} with subject '{subject}'?",
+        default=False,
+        err=True,
+    ):
+        utils.error_exit("cancelled", "Cancelled by user.")
+
+
 def _resolve_label_id(client: "ZohoMailClient", account_id: str, name_or_id: str) -> str:
     """Resolve a label name or numeric ID to a labelId string."""
     if name_or_id.isdigit():
@@ -489,6 +506,7 @@ def mail_send(
     bcc:       List[str]      = typer.Option([],   "--bcc",        help="BCC address (repeatable)."),
     attach:    List[str]      = typer.Option([],   "--attach",     help="Attachment path (repeatable)."),
     from_addr: Optional[str]  = typer.Option(None, "--from",       help="Sender address override."),
+    yes:       bool           = typer.Option(False, "--yes", "-y",  help="Skip send confirmation prompt."),
 ) -> None:
     """Send an email."""
     cfg       = _cfg()
@@ -518,10 +536,62 @@ def mail_send(
     if text and html_body:
         payload["altText"] = text
 
+    _confirm_outbound(
+        action="Send",
+        recipients=", ".join(to),
+        subject=subject,
+        yes=yes,
+    )
+
     resp   = client.send_message(account_id, payload, attachment_paths=attach or None)
     sent   = resp.get("data", resp)
     msg_id = str(sent.get("messageId", ""))
     utils.output_status(f"Sent to {', '.join(to)}", extra={"messageId": msg_id})
+
+
+@mail_app.command("draft")
+def mail_draft(
+    to:        List[str]      = typer.Option(...,  "--to",        help="Recipient (repeatable)."),
+    subject:   str            = typer.Option(...,  "--subject", "-s", help="Subject line."),
+    text:      Optional[str]  = typer.Option(None, "--text",       help="Plain-text body."),
+    html_file: Optional[str]  = typer.Option(None, "--html-file",  help="Path to HTML body file."),
+    cc:        List[str]      = typer.Option([],   "--cc",         help="CC address (repeatable)."),
+    bcc:       List[str]      = typer.Option([],   "--bcc",        help="BCC address (repeatable)."),
+    attach:    List[str]      = typer.Option([],   "--attach",     help="Attachment path (repeatable)."),
+    from_addr: Optional[str]  = typer.Option(None, "--from",       help="Sender address override."),
+) -> None:
+    """Create and save an email draft (does not send)."""
+    cfg       = _cfg()
+    email     = _require_account(cfg)
+    client    = _get_client(cfg, email)
+    account_id = _require_account_id(cfg, email)
+
+    html_body: Optional[str] = None
+    if html_file:
+        p = Path(html_file)
+        if not p.exists():
+            utils.error_exit("file_not_found", f"HTML file not found: {html_file}")
+        html_body = p.read_text()
+
+    if not text and not html_body:
+        utils.error_exit("missing_body", "Provide --text and/or --html-file.")
+
+    payload: dict = {
+        "fromAddress": from_addr or email,
+        "toAddress":   ",".join(to),
+        "subject":     subject,
+        "mailFormat":  "html" if html_body else "plaintext",
+        "content":     html_body or text or "",
+    }
+    if cc:  payload["ccAddress"]  = ",".join(cc)
+    if bcc: payload["bccAddress"] = ",".join(bcc)
+    if text and html_body:
+        payload["altText"] = text
+
+    resp     = client.save_draft(account_id, payload, attachment_paths=attach or None)
+    draft    = resp.get("data", resp)
+    draft_id = str(draft.get("messageId", draft.get("draftId", "")))
+    utils.output_status(f"Draft saved for {', '.join(to)}", extra={"draftId": draft_id})
 
 
 # ── bulk helpers ──────────────────────────────────────────────────────────────
@@ -619,6 +689,7 @@ def mail_reply(
     text:       str           = typer.Option(...,  "--text", "-t", help="Reply body."),
     folder_id:  Optional[str] = typer.Option(None, "--folder-id",  help="Folder ID (skips auto-scan)."),
     quote:      bool          = typer.Option(False, "--quote",      help="Append quoted original."),
+    yes:        bool          = typer.Option(False, "--yes", "-y",  help="Skip send confirmation prompt."),
 ) -> None:
     """Reply to a message."""
     cfg        = _cfg()
@@ -649,6 +720,7 @@ def mail_reply(
         "mailFormat":  "plaintext",
         "content":     body,
     }
+    _confirm_outbound(action="Send reply", recipients=to_addr, subject=subject, yes=yes)
     send_resp = client.send_message(account_id, payload)
     sent      = send_resp.get("data", send_resp)
     utils.output_status(f"Reply sent to {to_addr}", extra={"messageId": str(sent.get("messageId", ""))})
@@ -660,6 +732,7 @@ def mail_forward(
     to:         List[str]     = typer.Option(...,  "--to",  help="Recipient (repeatable)."),
     text:       Optional[str] = typer.Option(None, "--text", "-t", help="Optional note before the forwarded message."),
     folder_id:  Optional[str] = typer.Option(None, "--folder-id", help="Folder ID (skips auto-scan)."),
+    yes:        bool          = typer.Option(False, "--yes", "-y", help="Skip send confirmation prompt."),
 ) -> None:
     """Forward a message to one or more recipients."""
     cfg        = _cfg()
@@ -692,6 +765,12 @@ def mail_forward(
         "mailFormat":  "plaintext",
         "content":     body,
     }
+    _confirm_outbound(
+        action="Forward",
+        recipients=", ".join(to),
+        subject=subject,
+        yes=yes,
+    )
     send_resp = client.send_message(account_id, payload)
     sent      = send_resp.get("data", send_resp)
     utils.output_status(f"Forwarded to {', '.join(to)}", extra={"messageId": str(sent.get("messageId", ""))})

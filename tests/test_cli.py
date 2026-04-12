@@ -244,6 +244,90 @@ def test_mail_list_all_paginates(mock_config: Path, mock_token_refresh: Any) -> 
 
 
 # ---------------------------------------------------------------------------
+# mail send / draft safety
+# ---------------------------------------------------------------------------
+
+
+def test_mail_send_requires_confirmation_in_non_interactive(
+    mock_config: Path, mock_token_refresh: Any
+) -> None:
+    """mail send refuses to run in non-interactive mode unless --yes is provided."""
+    result = runner.invoke(
+        app,
+        [
+            "mail",
+            "send",
+            "--to",
+            "alice@example.com",
+            "--subject",
+            "Hello",
+            "--text",
+            "Body",
+        ],
+        env=_cfg_env(mock_config),
+    )
+    assert result.exit_code == 1
+    assert "confirmation_required" in result.output
+
+
+@respx.mock
+def test_mail_send_with_yes_succeeds(mock_config: Path, mock_token_refresh: Any) -> None:
+    """mail send proceeds with --yes and returns ok JSON."""
+    respx.post(f"{MAIL_BASE}/accounts/{ACCOUNT_ID}/messages").mock(
+        return_value=httpx.Response(200, json={"data": {"messageId": "S-1"}})
+    )
+    result = runner.invoke(
+        app,
+        [
+            "mail",
+            "send",
+            "--to",
+            "alice@example.com",
+            "--subject",
+            "Hello",
+            "--text",
+            "Body",
+            "--yes",
+        ],
+        env=_cfg_env(mock_config),
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["status"] == "ok"
+    assert payload["messageId"] == "S-1"
+
+
+@respx.mock
+def test_mail_draft_creates_draft_without_sending(
+    mock_config: Path, mock_token_refresh: Any
+) -> None:
+    """mail draft saves a draft message and returns a draftId."""
+    route = respx.post(f"{MAIL_BASE}/accounts/{ACCOUNT_ID}/messages").mock(
+        return_value=httpx.Response(200, json={"data": {"messageId": "D-1"}})
+    )
+    result = runner.invoke(
+        app,
+        [
+            "mail",
+            "draft",
+            "--to",
+            "alice@example.com",
+            "--subject",
+            "Draft subject",
+            "--text",
+            "Draft body",
+        ],
+        env=_cfg_env(mock_config),
+    )
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["status"] == "ok"
+    assert payload["draftId"] == "D-1"
+    body = route.calls.last.request.read().decode()
+    assert '"mode":"draft"' in body.replace(" ", "")
+
+
+# ---------------------------------------------------------------------------
 # folders list
 # ---------------------------------------------------------------------------
 

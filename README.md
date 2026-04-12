@@ -181,6 +181,21 @@ zoho mail send \
   --attach report.pdf --attach data.csv
 ```
 
+Safety guard: `send`, `reply`, and `forward` ask for confirmation before sending.  
+For scripts/non-interactive runs, pass `--yes`:
+
+```bash
+zoho mail send --to alice@example.com --subject "Hello" --text "Hi there!" --yes
+```
+
+### Drafts
+
+Create a draft without sending:
+
+```bash
+zoho mail draft --to alice@example.com --subject "Draft" --text "Work in progress"
+```
+
 ### Attachments
 
 ```bash
@@ -262,7 +277,7 @@ BODY=$(zoho mail search "budget approval" -n 1 \
   | jq -r '.[0].messageId' \
   | xargs -I{} zoho mail get {} \
   | jq -r '.textBody')
-zoho mail send --to cfo@example.com --subject "FWD: budget approval" --text "$BODY"
+zoho mail send --to cfo@example.com --subject "FWD: budget approval" --text "$BODY" --yes
 ```
 
 ---

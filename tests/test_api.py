@@ -107,6 +107,29 @@ def test_send_message_json(client: ZohoMailClient) -> None:
     assert result["data"]["messageId"] == "123"
 
 
+@respx.mock
+def test_save_draft_sets_mode_draft(client: ZohoMailClient) -> None:
+    """save_draft posts with mode=draft and returns the response dict."""
+    response_payload = {"data": {"messageId": "d-123", "status": "saved"}}
+    route = respx.post(f"{BASE}/accounts/{ACCOUNT_ID}/messages").mock(
+        return_value=httpx.Response(200, json=response_payload)
+    )
+    result = client.save_draft(
+        ACCOUNT_ID,
+        payload={
+            "fromAddress": "me@example.com",
+            "toAddress": "you@example.com",
+            "subject": "Draft",
+            "content": "Body",
+            "mailFormat": "plaintext",
+        },
+    )
+    assert result == response_payload
+    assert result["data"]["messageId"] == "d-123"
+    sent_json = route.calls.last.request.read().decode()
+    assert '"mode":"draft"' in sent_json.replace(" ", "")
+
+
 # ---------------------------------------------------------------------------
 # Error handling — non-2xx response
 # ---------------------------------------------------------------------------

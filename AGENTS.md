@@ -77,7 +77,17 @@ zoho mail send \
   --to recipient@example.com \
   --subject "Report $(date +%F)" \
   --text "See attached." \
-  --attach /tmp/report.pdf
+  --attach /tmp/report.pdf \
+  --yes
+```
+
+### Save draft without sending
+
+```bash
+zoho mail draft \
+  --to recipient@example.com \
+  --subject "Draft $(date +%F)" \
+  --text "WIP content"
 ```
 
 ---

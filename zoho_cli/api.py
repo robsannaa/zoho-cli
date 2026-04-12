@@ -214,3 +214,14 @@ class ZohoMailClient:
         finally:
             for fh in handles:
                 fh.close()
+
+    def save_draft(
+        self,
+        account_id: str,
+        payload: dict,
+        attachment_paths: Optional[list[str]] = None,
+    ) -> dict:
+        """Save an email as a draft (does not send)."""
+        draft_payload = dict(payload)
+        draft_payload["mode"] = "draft"
+        return self.send_message(account_id, draft_payload, attachment_paths=attachment_paths)
