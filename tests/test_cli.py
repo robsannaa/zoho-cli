@@ -208,6 +208,41 @@ def test_mail_list_limit_option(mock_config: Path, mock_token_refresh: Any) -> N
     assert called_params["limit"] == "5"
 
 
+@respx.mock
+def test_mail_list_all_paginates(mock_config: Path, mock_token_refresh: Any) -> None:
+    """--all pages through a folder until no more messages are returned."""
+    respx.get(f"{MAIL_BASE}/accounts/{ACCOUNT_ID}/folders").mock(
+        return_value=httpx.Response(
+            200,
+            json={"data": [{"folderId": "F1", "folderName": "Inbox", "folderType": "Inbox"}]},
+        )
+    )
+
+    def _paged_messages(request: httpx.Request) -> httpx.Response:
+        params = dict(request.url.params)
+        start = int(params.get("start", "0"))
+        if start == 0:
+            data = [
+                {"messageId": "m1", "subject": "S1", "sender": "a@example.com"},
+                {"messageId": "m2", "subject": "S2", "sender": "b@example.com"},
+            ]
+        elif start == 2:
+            data = [{"messageId": "m3", "subject": "S3", "sender": "c@example.com"}]
+        else:
+            data = []
+        return httpx.Response(200, json={"data": data})
+
+    route = respx.get(f"{MAIL_BASE}/accounts/{ACCOUNT_ID}/messages/view").mock(
+        side_effect=_paged_messages
+    )
+
+    result = runner.invoke(app, ["mail", "list", "--all"], env=_cfg_env(mock_config))
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert [m["messageId"] for m in payload] == ["m1", "m2", "m3"]
+    assert route.call_count == 3
+
+
 # ---------------------------------------------------------------------------
 # folders list
 # ---------------------------------------------------------------------------

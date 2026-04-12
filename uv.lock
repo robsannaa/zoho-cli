@@ -481,10 +481,11 @@ wheels = [
 
 [[package]]
 name = "zoho-cli"
-version = "0.1.0"
+version = "0.1.9"
 source = { editable = "." }
 dependencies = [
     { name = "httpx" },
+    { name = "idna" },
     { name = "keyring" },
     { name = "platformdirs" },
     { name = "typer" },
@@ -500,6 +501,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "httpx", specifier = ">=0.27" },
+    { name = "idna", specifier = ">=3.0" },
     { name = "keyring", specifier = ">=25" },
     { name = "platformdirs", specifier = ">=4" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },

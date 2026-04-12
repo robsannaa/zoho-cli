@@ -1,7 +1,7 @@
 """High-level mail helpers: folder resolution, message formatting."""
 
 import logging
-from typing import Optional
+from typing import Iterator, Optional
 
 from zoho_cli import utils
 from zoho_cli.api import ZohoMailClient
@@ -37,6 +37,44 @@ def resolve_folder_id(client: ZohoMailClient, account_id: str, folder_name: str)
     return ""  # unreachable
 
 
+def iter_folder_messages(
+    client: ZohoMailClient,
+    account_id: str,
+    folder_id: str,
+    *,
+    page_size: int = 50,
+) -> Iterator[dict]:
+    """Yield messages from a folder across all pages."""
+    start = 0
+    seen_ids: set[str] = set()
+
+    while True:
+        msgs = client.get_messages(account_id, folder_id, limit=page_size, start=start)
+        page = msgs.get("data", [])
+        if not page:
+            break
+
+        yielded = 0
+        for msg in page:
+            msg_id = str(msg.get("messageId", ""))
+            if msg_id and msg_id in seen_ids:
+                continue
+            if msg_id:
+                seen_ids.add(msg_id)
+            yielded += 1
+            yield msg
+
+        # Guard against misbehaving pagination that repeats the same page forever.
+        if yielded == 0:
+            break
+        start += len(page)
+
+
+def get_all_messages(client: ZohoMailClient, account_id: str, folder_id: str) -> list[dict]:
+    """Return all messages in a folder by paging until exhausted."""
+    return list(iter_folder_messages(client, account_id, folder_id))
+
+
 def find_folder_for_message(
     client: ZohoMailClient, account_id: str, message_id: str
 ) -> Optional[str]:
@@ -47,8 +85,7 @@ def find_folder_for_message(
     for folder in folders:
         folder_id = str(folder["folderId"])
         try:
-            msgs = client.get_messages(account_id, folder_id, limit=200)
-            for msg in msgs.get("data", []):
+            for msg in iter_folder_messages(client, account_id, folder_id):
                 if str(msg.get("messageId")) == message_id:
                     return folder_id
         except SystemExit:

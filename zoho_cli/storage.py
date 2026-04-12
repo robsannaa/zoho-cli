@@ -14,6 +14,13 @@ from zoho_cli import config as _config
 
 SERVICE_NAME = "zoho-cli"
 logger = logging.getLogger(__name__)
+_CONFIG_OVERRIDE: Optional[str] = None
+
+
+def configure(*, config_path: Optional[str] = None) -> None:
+    """Set runtime config-path override for fallback token file location."""
+    global _CONFIG_OVERRIDE
+    _CONFIG_OVERRIDE = config_path
 
 
 def store_token(
@@ -56,7 +63,7 @@ def delete_token(email: str) -> None:
 
 def _fallback_path(email: str) -> Path:
     safe = email.replace("@", "_at_").replace(".", "_")
-    return Path(_config.config_path().parent) / f"token_{safe}.json"
+    return Path(_config.config_path(_CONFIG_OVERRIDE).parent) / f"token_{safe}.json"
 
 
 def _store_raw(email: str, value: str) -> None:

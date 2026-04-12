@@ -1,10 +1,11 @@
 """OAuth 2.0 helpers: login flow, token exchange, token refresh."""
 
+import html
 import logging
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Optional
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import parse_qs, unquote, urlencode, urlparse
 
 import httpx
 
@@ -99,31 +100,120 @@ footer{color:#334155;font-size:.8rem;margin-top:.25rem}
 """
 
 
+def _error_html(message: str) -> str:
+    """HTML shown in the browser when OAuth fails (exchange or Zoho error redirect)."""
+    safe = html.escape(message, quote=False)
+    return f"""\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sign-in failed — zoho</title>
+<style>
+*,*::before,*::after{{box-sizing:border-box;margin:0;padding:0}}
+body{{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background:linear-gradient(145deg,#1a0f12 0%,#1c1518 100%);
+  color:#e2e8f0;min-height:100vh;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:2rem;gap:1.25rem;
+}}
+.icon-wrap{{display:inline-flex;margin-bottom:.25rem}}
+.icon{{font-size:3.5rem;line-height:1}}
+h1{{font-size:1.75rem;font-weight:700;letter-spacing:-.025em;color:#fca5a5}}
+.sub{{color:#94a3b8;font-size:.95rem;max-width:36rem;text-align:center;line-height:1.5}}
+.card{{
+  background:#161b27;border:1px solid #7f1d1d;border-radius:14px;
+  padding:1.25rem 1.5rem;width:100%;max-width:560px;
+}}
+.msg{{
+  font-family:'SF Mono','Fira Code','Cascadia Code',monospace;font-size:.82rem;
+  color:#fecaca;line-height:1.6;white-space:pre-wrap;word-break:break-word;
+}}
+footer{{color:#64748b;font-size:.8rem;margin-top:.25rem;text-align:center}}
+</style>
+</head>
+<body>
+<div class="icon-wrap"><span class="icon">⚠️</span></div>
+<h1>Couldn’t complete sign-in</h1>
+<p class="sub">Something went wrong while connecting to Zoho. Details below — you can also check the terminal.</p>
+<div class="card"><div class="msg">{safe}</div></div>
+<footer>You can close this window and fix the issue, then run <code style="color:#7dd3fc">zoho login</code> again.</footer>
+</body>
+</html>
+"""
+
+
 # ── local callback server ─────────────────────────────────────────────────────
 
-def _make_callback_handler(result: dict) -> type:
-    """Return a request handler class that captures the OAuth code."""
+def _make_callback_handler(
+    result: dict,
+    client_id: str,
+    client_secret: str,
+    redirect_uri_holder: list,
+) -> type:
+    """Return a request handler that exchanges the code and serves success or error HTML.
+
+    ``redirect_uri_holder`` is a single-element list filled with the real redirect URI
+    immediately after the server binds (port may be ephemeral).
+    """
 
     class _Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
             params = parse_qs(parsed.query)
-            code = params.get("code", [None])[0]
-            accounts_server = params.get("accounts-server", [None])[0]
 
-            if code:
-                result["code"] = code
-                result["accounts_server"] = accounts_server
-                body = _SUCCESS_HTML.encode("utf-8")
+            oauth_err = params.get("error", [None])[0]
+            if oauth_err:
+                desc = params.get("error_description", [oauth_err])[0] or oauth_err
+                msg = unquote(desc) if desc else oauth_err
+                result["oauth_error"] = msg
+                body = _error_html(msg).encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
-            else:
+                return
+
+            code = params.get("code", [None])[0]
+            accounts_server = params.get("accounts-server", [None])[0]
+
+            if not code:
                 self.send_response(400)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
                 self.end_headers()
                 self.wfile.write(b"Missing code parameter.")
+                return
+
+            redirect_uri = redirect_uri_holder[0] if redirect_uri_holder else ""
+            token_resp, err = try_exchange_code(
+                code,
+                client_id,
+                client_secret,
+                redirect_uri,
+                accounts_base_url=accounts_server,
+            )
+            if err:
+                result["oauth_error"] = err
+                body = _error_html(err).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            result["code"] = code
+            result["accounts_server"] = accounts_server
+            result["token_resp"] = token_resp
+            body = _SUCCESS_HTML.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
 
         def log_message(self, *args: object) -> None:
             pass  # suppress access logs
@@ -131,7 +221,12 @@ def _make_callback_handler(result: dict) -> type:
     return _Handler
 
 
-def create_callback_server(preferred_port: int = 51821) -> tuple:
+def create_callback_server(
+    preferred_port: int = 51821,
+    *,
+    client_id: str,
+    client_secret: str,
+) -> tuple:
     """
     Bind the OAuth callback server immediately and return early.
     Call this BEFORE region detection so the port is held the whole time.
@@ -143,7 +238,8 @@ def create_callback_server(preferred_port: int = 51821) -> tuple:
     Returns (server, redirect_uri, result_dict).
     """
     result: dict = {}
-    handler_cls = _make_callback_handler(result)
+    redirect_uri_holder: list[str] = []
+    handler_cls = _make_callback_handler(result, client_id, client_secret, redirect_uri_holder)
     try:
         server = HTTPServer(("127.0.0.1", preferred_port), handler_cls)
         actual_port = preferred_port
@@ -153,6 +249,7 @@ def create_callback_server(preferred_port: int = 51821) -> tuple:
     # Keep redirect_uri as localhost (matches Zoho console registration);
     # browsers resolve localhost → 127.0.0.1 so the binding above is reached.
     redirect_uri = f"http://localhost:{actual_port}/callback"
+    redirect_uri_holder.append(redirect_uri)
     return server, redirect_uri, result
 
 
@@ -160,17 +257,17 @@ def browser_login_flow(
     client_id: str,
     scopes: list[str],
     preferred_port: int = 51821,
+    client_secret: str = "",
     _server=None,
     _redirect_uri: Optional[str] = None,
     _result: Optional[dict] = None,
-) -> tuple[str, str, Optional[str]]:
+) -> tuple[str, str, Optional[str], Optional[dict]]:
     """
-    Open the browser, wait for the OAuth callback, return (redirect_uri, code, accounts_server).
+    Open the browser, wait for the OAuth callback.
 
-    If _server/_redirect_uri/_result are supplied (pre-created by the caller via
-    create_callback_server) they are used as-is; otherwise a new server is created.
-    This lets the caller bind the port *before* doing region detection so the
-    socket is always held when the browser redirect arrives.
+    Returns (redirect_uri, code, accounts_server, token_resp).
+    ``token_resp`` is set when the callback handler completed the token exchange;
+    otherwise ``None`` (caller should call ``exchange_code``).
     """
     import time
     import webbrowser
@@ -178,7 +275,14 @@ def browser_login_flow(
     if _server is not None and _redirect_uri is not None and _result is not None:
         server, redirect_uri, result = _server, _redirect_uri, _result
     else:
-        server, redirect_uri, result = create_callback_server(preferred_port)
+        if not client_secret:
+            utils.error_exit(
+                "missing_credentials",
+                "client_secret is required for the browser login flow.",
+            )
+        server, redirect_uri, result = create_callback_server(
+            preferred_port, client_id=client_id, client_secret=client_secret
+        )
 
     auth_url = build_auth_url(client_id, redirect_uri, scopes)
 
@@ -189,24 +293,25 @@ def browser_login_flow(
     else:
         print(f"Waiting for callback on {redirect_uri} …\n", file=sys.stderr)
 
-    # Loop until we capture the OAuth code. A single handle_request() is not
-    # enough: browsers fire extra requests (favicon, preflight) before the
-    # real /callback?code=... arrives.
     deadline = time.monotonic() + 300  # 5-minute wall-clock limit
     server.timeout = 2               # short poll so we can re-check deadline
-    while not result.get("code"):
+    while not result.get("token_resp") and not result.get("oauth_error"):
         if time.monotonic() > deadline:
             break
         server.handle_request()
     server.server_close()
 
+    if result.get("oauth_error"):
+        utils.error_exit("oauth_exchange_failed", result["oauth_error"])
+
+    token_resp = result.get("token_resp")
     code = result.get("code", "")
     accounts_server = result.get("accounts_server")
 
-    if not code:
+    if not token_resp and not code:
         utils.error_exit("oauth_timeout", "No authorisation code received. Did you approve access in the browser?")
 
-    return redirect_uri, code, accounts_server
+    return redirect_uri, code, accounts_server, token_resp if isinstance(token_resp, dict) else None
 
 
 # ── core OAuth helpers ────────────────────────────────────────────────────────
@@ -244,13 +349,14 @@ def parse_redirect(raw_url: str) -> tuple[str, Optional[str]]:
     return "", None  # unreachable
 
 
-def exchange_code(
+def try_exchange_code(
     code: str,
     client_id: str,
     client_secret: str,
     redirect_uri: str,
     accounts_base_url: Optional[str] = None,
-) -> dict:
+) -> tuple[Optional[dict], Optional[str]]:
+    """Exchange code for tokens. Returns (data, None) or (None, error_message)."""
     base = (accounts_base_url or _config.accounts_base_url()).rstrip("/")
     logger.debug("Exchanging auth code via %s", base)
     resp = httpx.post(
@@ -265,11 +371,26 @@ def exchange_code(
         timeout=30,
     )
     if resp.status_code != 200:
-        utils.error_exit("oauth_exchange_failed", f"HTTP {resp.status_code}: {resp.text}")
+        return None, f"HTTP {resp.status_code}: {resp.text}"
     data = resp.json()
     if "access_token" not in data:
-        utils.error_exit("oauth_exchange_failed", f"Unexpected response: {data}")
-    return data
+        return None, f"Unexpected response: {data}"
+    return data, None
+
+
+def exchange_code(
+    code: str,
+    client_id: str,
+    client_secret: str,
+    redirect_uri: str,
+    accounts_base_url: Optional[str] = None,
+) -> dict:
+    data, err = try_exchange_code(
+        code, client_id, client_secret, redirect_uri, accounts_base_url=accounts_base_url
+    )
+    if err:
+        utils.error_exit("oauth_exchange_failed", err)
+    return data  # type: ignore[return-value]
 
 
 def refresh_access_token(

@@ -8,16 +8,16 @@ This document describes how AI agents and automated systems should interact with
 
 | Context | Behaviour |
 |---|---|
-| Terminal (TTY) | Rich tables, coloured output |
+| Terminal (TTY) | JSON by default; use `--md` for markdown tables |
 | Pipe / script | JSON to stdout automatically |
-| `--json` flag | Force JSON even in a terminal |
+| `--md` flag | Force markdown table output for human-readable terminal output |
 | `--debug` flag | HTTP + internal logs to stderr only |
 
 **Always pipe stdout for JSON:**
 
 ```bash
 zoho mail list | jq '.[0].messageId'
-zoho --json folders list | jq '.[].folderName'
+zoho folders list | jq '.[].folderName'
 ```
 
 Errors are always written to **stderr** as JSON when piped, so stdout stays clean:
@@ -52,6 +52,12 @@ token automatically — no browser required after the initial `zoho login`.
 zoho mail list --folder Inbox --limit 100 | jq '[.[] | select(.unread)]'
 ```
 
+### List all messages in a folder
+
+```bash
+zoho mail list --folder Inbox --all
+```
+
 ### Get a specific message body
 
 ```bash
@@ -72,6 +78,22 @@ zoho mail send \
   --subject "Report $(date +%F)" \
   --text "See attached." \
   --attach /tmp/report.pdf
+```
+
+---
+
+## Local reinstall after code changes
+
+```bash
+cd /path/to/zoho-cli
+uv tool uninstall zoho-cli || true
+uv tool install .
+```
+
+Or run directly from source:
+
+```bash
+uv run zoho mail list --all
 ```
 
 ### Download all attachments in a loop

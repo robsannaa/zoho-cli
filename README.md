@@ -51,6 +51,20 @@ cd zoho-cli
 uv tool install .
 ```
 
+Reinstall local changes (after pulling or editing code):
+
+```bash
+cd /path/to/zoho-cli
+uv tool uninstall zoho-cli || true
+uv tool install .
+```
+
+Run directly from source without reinstalling:
+
+```bash
+uv run zoho mail list --all
+```
+
 ---
 
 ## Setup
@@ -126,6 +140,7 @@ zoho login --no-browser
 zoho mail list                          # Inbox, 50 messages
 zoho mail list --folder Sent -n 20
 zoho mail list --folder "My Project" --limit 100
+zoho mail list --all                   # fetch every message via pagination
 ```
 
 Output fields: `messageId`, `folderId`, `subject`, `from`, `to`, `date`, `unread`, `hasAttachments`, `tags`.

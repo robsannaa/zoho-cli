@@ -100,6 +100,7 @@ def _global(
     _S.config_path = config_path
     _S.debug       = debug
     _S.md          = md
+    storage.configure(config_path=config_path)
     utils.configure(md=md)
     if debug:
         utils.setup_debug()
@@ -245,11 +246,12 @@ def login(
         client_id = click.prompt("Zoho OAuth Client ID", err=True).strip()
         cfg["client_id"] = client_id
     if not client_secret:
-        client_secret = click.prompt("Zoho OAuth Client Secret", hide_input=True, err=True).strip()
+        client_secret = click.prompt("Zoho OAuth Client Secret", err=True).strip()
         cfg["client_secret"] = client_secret
 
     import os
     scopes = auth.DEFAULT_SCOPES
+    token_resp: Optional[dict] = None
 
     if no_browser:
         # ── manual paste flow (headless / remote) ─────────────────────────
@@ -275,7 +277,9 @@ def login(
         # ── browser flow with local callback server ────────────────────────
         # Bind the port NOW — before region detection — so it is held during
         # the ~8 s probe window and ready the instant the browser redirects.
-        cb_server, redirect_uri, _cb_result = auth.create_callback_server(port)
+        cb_server, redirect_uri, _cb_result = auth.create_callback_server(
+            port, client_id=client_id, client_secret=client_secret
+        )
         _stderr(f"Listening on {redirect_uri} …")
 
         # Detect region while the server is already bound.
@@ -286,15 +290,16 @@ def login(
             _stderr(f"Detected: {forced_accounts_url}")
         os.environ["ZOHO_ACCOUNTS_BASE_URL"] = forced_accounts_url
 
-        redirect_uri, code, accounts_server = auth.browser_login_flow(
+        redirect_uri, code, accounts_server, token_resp = auth.browser_login_flow(
             client_id, scopes, preferred_port=port,
             _server=cb_server, _redirect_uri=redirect_uri, _result=_cb_result,
         )
 
-    token_resp = auth.exchange_code(
-        code, client_id, client_secret, redirect_uri,
-        accounts_base_url=accounts_server,
-    )
+    if token_resp is None:
+        token_resp = auth.exchange_code(
+            code, client_id, client_secret, redirect_uri,
+            accounts_base_url=accounts_server,
+        )
     access_token  = token_resp["access_token"]
     refresh_token = token_resp.get("refresh_token")
 
@@ -362,6 +367,9 @@ def login(
 def mail_list(
     folder: str = typer.Option("Inbox", "--folder", "-f", help="Folder name or ID."),
     limit:  int  = typer.Option(50,      "--limit",  "-n", help="Max messages."),
+    all_messages: bool = typer.Option(
+        False, "--all", help="Fetch all messages by paging through the folder.",
+    ),
 ) -> None:
     """List messages in a folder."""
     cfg       = _cfg()
@@ -370,8 +378,15 @@ def mail_list(
     account_id = _require_account_id(cfg, email)
 
     folder_id = _mail.resolve_folder_id(client, account_id, folder)
-    resp      = client.get_messages(account_id, folder_id, limit=limit)
-    messages  = [_mail.format_message_summary(m) for m in resp.get("data", [])]
+    if all_messages:
+        raw_messages = _mail.get_all_messages(client, account_id, folder_id)
+    else:
+        if limit < 1:
+            utils.error_exit("invalid_limit", "--limit must be >= 1.")
+        resp = client.get_messages(account_id, folder_id, limit=limit)
+        raw_messages = resp.get("data", [])
+
+    messages = [_mail.format_message_summary(m) for m in raw_messages]
     utils.output(messages, md_render=_md_mail_list)
 
 
@@ -918,7 +933,7 @@ def config_init() -> None:
     _stderr("Get your credentials at:  https://api-console.zoho.com/")
     _stderr("")
     _stderr("  1. Click 'Add Client' → 'Server-based Application'")
-    _stderr("  2. Add redirect URI:   http://localhost:51821/")
+    _stderr("  2. Add redirect URI:   http://localhost:51821/callback")
     _stderr("  3. Copy the Client ID and Secret from that page.")
     _stderr("")
     if is_first_run:
@@ -951,12 +966,12 @@ def config_init() -> None:
     if existing_sec:
         cfg["client_secret"] = _optional(
             "Zoho OAuth Client Secret", existing_sec,
-            hide_input=True, confirmation_prompt=False,
+            confirmation_prompt=False,
         )
     else:
         cfg["client_secret"] = _required(
             "Zoho OAuth Client Secret",
-            hide_input=True, confirmation_prompt=False,
+            confirmation_prompt=False,
         )
 
     # ── account e-mail ────────────────────────────────────────────────────────
